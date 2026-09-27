@@ -283,7 +283,6 @@ try:
         st.markdown(f"**Diagrama T-s — Rankine {'regenerativo con recalentamiento' if tiene_recal and num_fwh>0 else 'estándar'}**")
         st.caption("Pasa el cursor sobre las líneas y puntos para inspeccionar la temperatura y entropía exacta de cada estado.")
 
-        # Construir Campana de saturación en Plotly
         T_crit = CP.PropsSI('Tcrit', fluido)
         T_campana = np.linspace(273.16, T_crit - 0.2, 200)
         s_liq = [CP.PropsSI('S', 'T', t, 'Q', 0, fluido)/1e3 for t in T_campana]
@@ -291,7 +290,6 @@ try:
 
         fig = go.Figure()
 
-        # Campana saturación
         fig.add_trace(go.Scatter(
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
@@ -301,7 +299,6 @@ try:
             hoverinfo='skip'
         ))
 
-        # Función para trazar isóbaras finas
         def add_isobara(P_pa, nombre):
             try:
                 T_sat = CP.PropsSI('T', 'P', P_pa, 'Q', 0, fluido) - 273.15
@@ -326,7 +323,6 @@ try:
             add_isobara(P_recal_Pa, f"{P_recal/1e3:.1f} MPa")
         add_isobara(P_cald_Pa, f"{P_cald/1e3:.1f} MPa")
 
-        # Trazado del ciclo termodinámico idéntico al de tu compañero
         if tiene_recal and num_fwh >= 2:
             p_fwh_abierto = min(f['presion'] for f in fwh_configuracion) * 1e3
             h_10_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
@@ -339,13 +335,11 @@ try:
             s_6 = CP.PropsSI('S', 'P', P_recal_Pa, 'Q', 0, fluido)/1e3
             t_6 = CP.PropsSI('T', 'P', P_recal_Pa, 'Q', 0, fluido) - 273.15
 
-            # Curva caldera y recalentador
             T_cald_c = np.linspace(t_6 + 273.15, T_max_K, 20)
             s_cald_c = [CP.PropsSI('S', 'P', P_cald_Pa, 'T', t, fluido)/1e3 for t in T_cald_c]
             T_rec_c = np.linspace(t_10 + 273.15, T_recal_K, 15)
             s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t, fluido)/1e3 for t in T_rec_c]
 
-            # Trazo principal del ciclo (Naranja brillante estilo gráfico del compañero)
             x_ciclo = [s1/1e3, s1/1e3, s_3, s_3] + s_cald_c + [s_in_turb/1e3, s_in_turb/1e3] + s_rec_c + [s_rec_in2/1e3, s_out_turb/1e3, s1/1e3]
             y_ciclo = [T1, T1+4, t_3, t_3+8] + [t-273.15 for t in T_cald_c] + [T_max, t_10] + [t-273.15 for t in T_rec_c] + [T_recal, T_out_turb, T1]
 
@@ -358,7 +352,6 @@ try:
                 hoverinfo='none'
             ))
 
-            # Extracciones a calentadores (líneas moradas de extracción)
             fig.add_trace(go.Scatter(
                 x=[s_in_turb/1e3, s_6],
                 y=[t_10, t_6],
@@ -374,7 +367,6 @@ try:
                 name='Extracción a CAA (z)'
             ))
 
-            # Puntos numerados
             puntos_x = [s1/1e3, s_3, s_6, s_in_turb/1e3, s_in_turb/1e3, s_rec_in2/1e3, s_rec_in2/1e3, s_out_turb/1e3]
             puntos_y = [T1, t_3, t_6, T_max, t_10, T_recal, t_12, T_out_turb]
             puntos_txt = ["1", "3", "6", "9", "10", "11", "12", "13"]
@@ -391,7 +383,6 @@ try:
                 hovertemplate="<b>Estado %{text}</b><br>s: %{x:.3f} kJ/kg·K<br>T: %{y:.1f} °C<extra></extra>"
             ))
         else:
-            # Trazo ciclo estándar
             pts_x = [s1/1e3, s1/1e3, s_in_turb/1e3, s_out_turb/1e3, s1/1e3]
             pts_y = [T1, T2, T_max, T_out_turb, T1]
             fig.add_trace(go.Scatter(
@@ -412,16 +403,14 @@ try:
             plot_bgcolor='#0b0f19',
             margin=dict(l=40, r=20, t=20, b=40),
             xaxis=dict(
-                title='Entropía, s [kJ/kg · K]',
-                titlefont=dict(color='#9ca3af', size=12),
+                title=dict(text='Entropía, s [kJ/kg · K]', font=dict(color='#9ca3af', size=12)),
                 tickfont=dict(color='#9ca3af'),
                 gridcolor='#1e293b',
                 zeroline=False,
                 range=[0.0, 9.2]
             ),
             yaxis=dict(
-                title='Temperatura, T [°C]',
-                titlefont=dict(color='#9ca3af', size=12),
+                title=dict(text='Temperatura, T [°C]', font=dict(color='#9ca3af', size=12)),
                 tickfont=dict(color='#9ca3af'),
                 gridcolor='#1e293b',
                 zeroline=False,
