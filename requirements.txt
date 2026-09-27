@@ -4,3 +4,4 @@ numpy
 streamlit
 google-genai
 pillow
+plotly
