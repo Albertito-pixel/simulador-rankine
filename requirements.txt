@@ -2,3 +2,5 @@ CoolProp
 matplotlib
 numpy
 streamlit
+google-genai
+pillow
