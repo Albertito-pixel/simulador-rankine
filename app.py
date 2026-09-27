@@ -37,12 +37,13 @@ if archivo_subido is not None:
     col_img, col_info = st.columns([1, 2])
     with col_img:
         st.image(imagen, caption="Imagen cargada", use_container_width=True)
-    
-    with col_info:
-        with st.spinner("Analizando problema con IA..."):
+    with st.spinner("Analizando problema y resolviendo incisos con IA..."):
             prompt = """
-            Eres un experto en termodinámica. Lee atentamente la imagen del enunciado y/o diagrama del ciclo.
-            Extrae los parámetros termodinámicos para un ciclo Rankine.
+            Eres un profesor experto en termodinámica. Analiza la imagen del problema adjunto.
+            Debes hacer dos tareas:
+            1. Extraer los datos numéricos principales para el simulador numérico.
+            2. Resolver en detalle paso a paso TODOS los incisos o preguntas específicas que pide el enunciado (por ejemplo: destrucción de exergía, eficiencia de segunda ley, potencia neta, calidad, etc.), mostrando ecuaciones, sustitución y resultados numéricos finales claros.
+
             Devuelve ÚNICAMENTE un JSON con esta estructura exacta:
             {
               "P_cald_kPa": float,
@@ -50,25 +51,23 @@ if archivo_subido is not None:
               "P_cond_kPa": float,
               "eta_t": float,
               "eta_p": float,
-              "P_exts_kPa": [lista de presiones de extracciones/calentadores ordenada de mayor a menor]
+              "P_exts_kPa": [lista de presiones intermedias ordenada],
+              "solucion_paso_a_paso": "Texto en formato Markdown bien estructurado resolviendo los incisos a), b), etc."
             }
-            Reglas:
-            - Presiones en kPa.
-            - Temperaturas en Celsius (°C).
-            - Si no menciona eficiencias isentrópicas, asigna 1.0.
-            - Si no hay calentadores (FWH), 'P_exts_kPa' debe ser [].
             """
             try:
                 response = client.models.generate_content(
-                    model="gemini-3.8-flash",
+                    model="gemini-flash-latest",
                     contents=[imagen, prompt],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
                 datos_ia = json.loads(response.text)
-                st.success("¡Datos extraídos con éxito!")
-                st.json(datos_ia)
+                st.success("¡Problema interpretado y resuelto!")
 
-                # Sobrescribir valores
+                # Guardamos la solución redactada en la sesión para mostrarla abajo
+                st.session_state["solucion_texto"] = datos_ia.get("solucion_paso_a_paso", "")
+
+                # Extraer parámetros para CoolProp
                 P_cald_def = float(datos_ia.get("P_cald_kPa", P_cald_def))
                 T_max_def = float(datos_ia.get("T_max_C", T_max_def))
                 P_cond_def = float(datos_ia.get("P_cond_kPa", P_cond_def))
@@ -219,3 +218,9 @@ try:
 
 except Exception as err:
     st.error(f"Error en los cálculos termodinámicos: {err}")
+
+# Mostrar la solución analítica de los incisos que pedía el libro
+    if "solucion_texto" in st.session_state and st.session_state["solucion_texto"]:
+        st.markdown("---")
+        st.subheader("📝 Solución Paso a Paso del Problema (Incisos)")
+        st.markdown(st.session_state["solucion_texto"])
