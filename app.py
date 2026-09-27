@@ -12,10 +12,9 @@ from google.genai import types
 # CONFIGURACIÓN GENERAL Y ESTILO INDUSTRIAL
 # ==========================================
 st.set_page_config(
-    page_title="Sintetizador & Simulador de Ciclos Rankine",
+    page_title="TermoRankine Pro | Simulador & Solucionador",
     page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 st.markdown("""
@@ -26,35 +25,29 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
     
-    /* Fondo principal y tarjetas superiores */
     .stApp {
         background-color: #0b0f19;
     }
     
-    .metric-card {
-        background: #111827;
+    .hero-box {
+        background: linear-gradient(135deg, #090d16 0%, #111827 50%, #1e293b 100%);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        padding: 1rem 1.2rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        border-radius: 12px;
+        padding: 1.4rem 1.8rem;
+        margin-bottom: 1.2rem;
     }
-    .metric-tag {
-        font-size: 0.75rem;
-        color: #9ca3af;
-        text-transform: uppercase;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-    }
-    .metric-val {
+    
+    .hero-title {
         font-size: 1.8rem;
         font-weight: 700;
-        color: #f9fafb;
-        margin: 0.2rem 0;
-        font-family: 'JetBrains Mono', monospace;
+        color: #f8fafc;
+        margin: 0;
     }
-    .metric-sub {
-        font-size: 0.8rem;
-        color: #38bdf8;
+    
+    .hero-sub {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        margin-top: 0.3rem;
     }
     
     .incisos-box {
@@ -67,6 +60,13 @@ st.markdown("""
         line-height: 1.6;
     }
 </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="hero-box">
+    <div class="hero-title">⚡ TermoRankine Pro</div>
+    <div class="hero-sub">Simulador interactivo con diagramas T-s avanzados, balances de energía y resolución analítica por IA.</div>
+</div>
 """, unsafe_allow_html=True)
 
 API_KEY = "AQ.Ab8RN6JKJe6A73xhJiwhAarynVw4JfkT5I-_XBvHcOUQkuX-OQ"
@@ -269,37 +269,6 @@ try:
 
     w_rev = q_in * (1.0 - (T0 / TH))
     eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
-
-    # ==========================================
-    # TARJETAS DE RESULTADOS SUPERIORES (DASHBOARD)
-    # ==========================================
-    col_c1, col_c2, col_c3 = st.columns(3)
-    with col_c1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-tag">Eficiencia Térmica (1ra Ley)</div>
-            <div class="metric-val">{eta_th:.2f} %</div>
-            <div class="metric-sub">Rankine {'con recalentamiento' if tiene_recal else 'simple'} | {num_fwh} Calentadores</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_c2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-tag">Eficiencia 2da Ley (Exergética)</div>
-            <div class="metric-val">{eta_II:.2f} %</div>
-            <div class="metric-sub">T_H = {TH:.0f} K | T_0 = {T0:.0f} K</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_c3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-tag">Trabajo Neto Específico</div>
-            <div class="metric-val">{w_neto/1e3:.2f} <span style="font-size: 1rem; color:#9ca3af;">kJ/kg</span></div>
-            <div class="metric-sub">Q_in = {q_in/1e3:.2f} kJ/kg</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
     # ==========================================
     # PESTAÑAS PRINCIPALES DE VISUALIZACIÓN
