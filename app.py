@@ -19,7 +19,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, sans-serif;
@@ -232,6 +232,17 @@ T_max_K = T_max + 273.15
 P_recal_Pa = P_recal * 1e3
 T_recal_K = T_recal + 273.15
 
+def get_T_safe(P_val, H_val):
+    """Obtiene la temperatura de forma segura sin fallar en saturación."""
+    try:
+        h_f = CP.PropsSI('H', 'P', P_val, 'Q', 0, fluido)
+        h_g = CP.PropsSI('H', 'P', P_val, 'Q', 1, fluido)
+        if h_f <= H_val <= h_g:
+            return CP.PropsSI('T', 'P', P_val, 'Q', 0, fluido) - 273.15
+        return CP.PropsSI('T', 'P', P_val, 'H', H_val, fluido) - 273.15
+    except Exception:
+        return CP.PropsSI('T', 'P', P_val, 'Q', 0, fluido) - 273.15
+
 try:
     # Estado 1: Salida del condensador
     h1 = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
@@ -247,7 +258,7 @@ try:
         h_rec_s = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
         h_rec_sal = h_in_turb - eta_t * (h_in_turb - h_rec_s)
         s_rec_sal = CP.PropsSI('S', 'P', P_recal_Pa, 'H', h_rec_sal, fluido)
-        T_rec_sal = CP.PropsSI('T', 'P', P_recal_Pa, 'H', h_rec_sal, fluido) - 273.15
+        T_rec_sal = get_T_safe(P_recal_Pa, h_rec_sal)
 
         h_rec_in2 = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
         s_rec_in2 = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
@@ -257,19 +268,19 @@ try:
         w_t = (h_in_turb - h_rec_sal) + (h_rec_in2 - h_out_turb)
         q_recal = h_rec_in2 - h_rec_sal
         s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
-        T_out_turb = CP.PropsSI('T', 'P', P_cond_Pa, 'H', h_out_turb, fluido) - 273.15
+        T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
     else:
         h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_in_turb, fluido)
         h_out_turb = h_in_turb - eta_t * (h_in_turb - h_out_s)
         w_t = h_in_turb - h_out_turb
         q_recal = 0.0
         s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
-        T_out_turb = CP.PropsSI('T', 'P', P_cond_Pa, 'H', h_out_turb, fluido) - 273.15
+        T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
 
     w_b = v1 * (P_cald_Pa - P_cond_Pa) / eta_p
     h2 = h1 + w_b
     s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
-    T2 = CP.PropsSI('T', 'P', P_cald_Pa, 'H', h2, fluido) - 273.15
+    T2 = get_T_safe(P_cald_Pa, h2)
 
     q_in = (h_in_turb - h2) + q_recal
     q_out = h_out_turb - h1
@@ -297,21 +308,25 @@ try:
 
     # Isóbaras del sistema
     def trazar_isobara(P_val, color_linea='#94a3b8', label_txt=''):
-        T_sat = CP.PropsSI('T', 'P', P_val, 'Q', 0, fluido) - 273.15
-        s_f = CP.PropsSI('S', 'P', P_val, 'Q', 0, fluido)/1e3
-        s_g = CP.PropsSI('S', 'P', P_val, 'Q', 1, fluido)/1e3
-        
-        # Línea horizontal en zona de mezcla
-        ax.plot([s_f, s_g], [T_sat, T_sat], color=color_linea, linestyle='-', linewidth=1.2, alpha=0.85)
-        # Curva de vapor sobrecalentado
-        T_sup = np.linspace(T_sat, min(650.0, T_max + 30.0), 40)
-        s_sup = [CP.PropsSI('S', 'P', P_val, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
-        ax.plot(s_sup, T_sup, color=color_linea, linestyle='-', linewidth=1.2, alpha=0.85)
-        
-        if label_txt:
-            ax.text(s_sup[int(len(s_sup)*0.45)], T_sup[int(len(T_sup)*0.45)] + 10, label_txt, 
-                    fontsize=9, color='#334155', fontweight='600',
-                    bbox=dict(boxstyle='square,pad=0.15', facecolor='white', edgecolor='none', alpha=0.7))
+        try:
+            T_sat = CP.PropsSI('T', 'P', P_val, 'Q', 0, fluido) - 273.15
+            s_f = CP.PropsSI('S', 'P', P_val, 'Q', 0, fluido)/1e3
+            s_g = CP.PropsSI('S', 'P', P_val, 'Q', 1, fluido)/1e3
+            
+            # Línea horizontal en zona de mezcla
+            ax.plot([s_f, s_g], [T_sat, T_sat], color=color_linea, linestyle='-', linewidth=1.2, alpha=0.85)
+            # Curva de vapor sobrecalentado
+            T_sup = np.linspace(T_sat, min(650.0, T_max + 30.0), 35)
+            s_sup = [CP.PropsSI('S', 'P', P_val, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
+            ax.plot(s_sup, T_sup, color=color_linea, linestyle='-', linewidth=1.2, alpha=0.85)
+            
+            if label_txt:
+                idx = int(len(s_sup)*0.45)
+                ax.text(s_sup[idx], T_sup[idx] + 10, label_txt, 
+                        fontsize=9, color='#334155', fontweight='600',
+                        bbox=dict(boxstyle='square,pad=0.15', facecolor='white', edgecolor='none', alpha=0.7))
+        except Exception:
+            pass
 
     trazar_isobara(P_cond_Pa, '#cbd5e1', f'{P_cond/1e3:.2f} MPa' if P_cond>=1000 else f'{P_cond:.0f} kPa')
     if tiene_recal:
@@ -322,17 +337,15 @@ try:
 
     # Trazo del ciclo termodinámico y estados numerados
     if tiene_recal and num_fwh >= 2:
-        # Puntos del ciclo idéntico al Ejemplo 10-6 del Çengel
         h_6_p = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
         s_6_p = s_in_turb
-        T_6_p = CP.PropsSI('T', 'P', P_recal_Pa, 'H', h_6_p, fluido) - 273.15
+        T_6_p = get_T_safe(P_recal_Pa, h_6_p)
 
         p_fwh_abierto = min(f['presion'] for f in fwh_configuracion) * 1e3
         h_8_p = CP.PropsSI('H', 'P', p_fwh_abierto, 'S', s_rec_in2, fluido)
         s_8_p = s_rec_in2
-        T_8_p = CP.PropsSI('T', 'P', p_fwh_abierto, 'H', h_8_p, fluido) - 273.15
+        T_8_p = get_T_safe(p_fwh_abierto, h_8_p)
 
-        # Puntos con coordenadas (s, T)
         pt_9 = (s_in_turb/1e3, T_max)
         pt_10 = (s_6_p/1e3, T_6_p)
         pt_11 = (s_rec_in2/1e3, T_recal)
@@ -347,7 +360,6 @@ try:
         pt_5 = (pt_6[0] - 0.25, pt_6[1] - 8)
         pt_8 = (pt_6[0] - 0.12, pt_6[1] + 3)
 
-        # Conectar líneas del ciclo
         ax.plot([pt_9[0], pt_10[0]], [pt_9[1], pt_10[1]], color='#2563eb', linewidth=2.4)
         ax.plot([pt_10[0], pt_11[0]], [pt_10[1], pt_11[1]], color='#dc2626', linewidth=2.4)
         ax.plot([pt_11[0], pt_12[0], pt_13[0]], [pt_11[1], pt_12[1], pt_13[1]], color='#2563eb', linewidth=2.4)
@@ -358,7 +370,6 @@ try:
         ax.plot([pt_10[0], pt_6[0], pt_7[0]], [pt_10[1], pt_6[1], pt_7[1]], color='#9333ea', linewidth=2.0)
         ax.plot([pt_12[0], pt_3[0]], [pt_12[1], pt_3[1]], color='#9333ea', linewidth=2.0)
 
-        # Rotular estados con círculos negros y texto numerado
         estados = [
             (pt_1, "1"), (pt_2, "2"), (pt_3, "3"), (pt_4, "4"), (pt_5, "5"),
             (pt_6, "6"), (pt_7, "7"), (pt_8, "8"), (pt_9, "9"), (pt_10, "10"),
@@ -369,7 +380,6 @@ try:
             ax.annotate(txt, xy=coord, xytext=(5, 4), textcoords='offset points', 
                         fontsize=9.5, fontweight='bold', color='#0f172a')
 
-        # Etiquetas de fracciones de flujo
         ax.text(6.0, 520, '1 kg', fontsize=9, color='#1e293b', fontstyle='italic')
         ax.text(6.8, 520, '1 - y', fontsize=9, color='#1e293b', fontstyle='italic')
         ax.text(6.85, 360, 'y', fontsize=9, color='#7c3aed', fontweight='600')
@@ -377,7 +387,6 @@ try:
         ax.text(7.48, 140, '1 - y - z', fontsize=9, color='#1e293b', fontstyle='italic')
 
     else:
-        # Ciclo con recalentamiento o simple
         if tiene_recal:
             pts_s = [s1/1e3, s2/1e3, s_in_turb/1e3, s_rec_sal/1e3, s_rec_in2/1e3, s_out_turb/1e3, s1/1e3]
             pts_t = [T1, T2, T_max, T_rec_sal, T_recal, T_out_turb, T1]
@@ -398,7 +407,6 @@ try:
     ax.set_ylim(-10, max(680.0, T_max + 50.0))
     ax.grid(True, linestyle=':', alpha=0.5, color='#cbd5e1')
     
-    # Ejes limpios estilo publicación
     for spine in ['top', 'right']:
         ax.spines[spine].set_visible(False)
     for spine in ['left', 'bottom']:
@@ -449,7 +457,7 @@ try:
             st.dataframe(t_fwh, use_container_width=True, hide_index=True)
 
     # =========================================================
-    # 4. SOLUCIÓN COMPLETA DE LOS INCISOS (AL FINAL DE LA PÁGINA)
+    # 4. SOLUCIÓN COMPLETA DE LOS INCISOS
     # =========================================================
     if st.session_state["solucion_texto"]:
         st.markdown('<div class="section-header">📝 Respuestas Detalladas del Problema (Incisos)</div>', unsafe_allow_html=True)
