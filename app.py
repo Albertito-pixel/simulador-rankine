@@ -172,7 +172,7 @@ if metodo == "📷 Captura con IA":
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Fronteras del Ciclo:**")
 P_cald = st.sidebar.number_input("Presión Caldera [kPa]", value=float(st.session_state["P_cald"]), step=500.0)
-T_max = st.sidebar.number_input("Vapor Vivo (T_max) [°C]", value=float(st.session_state["T_max"]), step=10.0)
+T_max = st.sidebar.number_input("Temperatura Entrada Turbina [°C], value=float(st.session_state["T_max"]), step=10.0)
 P_cond = st.sidebar.number_input("Presión Condensador [kPa]", value=float(st.session_state["P_cond"]), step=5.0)
 
 st.sidebar.markdown("---")
