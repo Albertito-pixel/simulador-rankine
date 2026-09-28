@@ -11,7 +11,7 @@ from google.genai import types
 # CONFIGURACIÓN GENERAL Y ESTILO INDUSTRIAL
 # ==========================================
 st.set_page_config(
-    page_title="TermoRankine Pro | Simulador & Solucionador",
+    page_title="TermoRankine Pro | Centrales de Potencia & Cogeneración",
     page_icon="⚡",
     layout="wide"
 )
@@ -64,7 +64,7 @@ st.markdown("""
 st.markdown("""
 <div class="hero-box">
     <div class="hero-title">⚡ TermoRankine Pro</div>
-    <div class="hero-sub">Simulador térmico de ciclos de potencia, diagramas T-s estilo textbook y memoria de cálculo analítica.</div>
+    <div class="hero-sub">Simulador térmico integral: ciclos de potencia regenerativos, cogeneración industrial y diagramas T-s interactivos.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -75,21 +75,29 @@ except Exception:
     client = None
 
 # ==========================================
-# VARIABLES POR DEFECTO
+# GESTIÓN DE VARIABLES DE ESTADO
 # ==========================================
 defaults = {
+    "tipo_planta": "Central de Potencia (Regenerativa / Recalentamiento)",
     "P_cald": 15000.0,
     "T_max": 600.0,
     "P_cond": 10.0,
+    "m_dot": 15.0,
     "tiene_recal": True,
-    "P_recal": 4000.0,
+    "recal_optimo": True,
+    "P_recal": 3750.0,
     "T_recal": 600.0,
     "num_fwh": 3,
     "fwh_data": [
-        {"tipo": "Cerrado (CCA)", "presion": 4000.0},
-        {"tipo": "Abierto (CAA)", "presion": 1200.0},
-        {"tipo": "Cerrado (CCA)", "presion": 250.0}
+        {"tipo": "Cerrado (CCA)", "presion": 4000.0, "drenaje": "Trampa de Vapor (Cascada)"},
+        {"tipo": "Abierto (CAA)", "presion": 1200.0, "drenaje": "Mezcla Directa"},
+        {"tipo": "Cerrado (CCA)", "presion": 250.0, "drenaje": "Trampa de Vapor (Cascada)"}
     ],
+    # Variables de Cogeneración
+    "P_proc": 500.0,
+    "frac_byp": 10.0,
+    "frac_turb_proc": 70.0,
+    "modo_cogen": "Modo Operativo Normal (Extracción Combinada)",
     "eta_t": 100.0,
     "eta_p": 100.0,
     "TH": 800.0,
@@ -101,103 +109,128 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # ==========================================
-# BARRA LATERAL: CONFIGURACIÓN
+# BARRA LATERAL: ENTRADA Y PARÁMETROS
 # ==========================================
-st.sidebar.markdown("### ⚡ Parámetros del Ciclo")
-
-metodo = st.sidebar.radio(
-    "Modo de ingreso:",
-    ["✍️ Manual", "📷 Cargar Imagen / Enunciado"],
-    horizontal=True
+st.sidebar.markdown("### ⚙️ Tipo de Instalación")
+tipo_planta = st.sidebar.selectbox(
+    "Seleccione el sistema térmico:",
+    ["Central de Potencia (Regenerativa / Recalentamiento)", "Planta de Cogeneración (Calor y Potencia)"],
+    index=0 if "Potencia" in st.session_state["tipo_planta"] else 1
 )
+st.session_state["tipo_planta"] = tipo_planta
+
+metodo = st.sidebar.radio("Modo de ingreso:", ["✍️ Manual", "📷 Cargar Imagen / Enunciado"], horizontal=True)
 
 if metodo == "📷 Cargar Imagen / Enunciado":
-    archivo = st.sidebar.file_uploader("Subir diagrama o enunciado del problema", type=["png", "jpg", "jpeg", "webp"])
-    if archivo:
+    archivo = st.sidebar.file_uploader("Subir diagrama o enunciado técnico", type=["png", "jpg", "jpeg", "webp"])
+    if archivo and client:
         img = Image.open(archivo)
         if st.sidebar.button("🔍 Extraer Datos y Procesar", type="primary", use_container_width=True):
-            if client:
-                with st.spinner("Extrayendo parámetros termodinámicos..."):
-                    try:
-                        prompt = """
-                        Analiza la imagen técnica del ciclo Rankine.
-                        Devuelve ÚNICAMENTE un JSON con:
-                        {
-                          "P_cald_kPa": float,
-                          "T_max_C": float,
-                          "P_cond_kPa": float,
-                          "tiene_recal": bool,
-                          "P_recal_kPa": float o null,
-                          "T_recal_C": float o null,
-                          "num_fwh": int,
-                          "fwh_lista": [
-                             {"tipo": "Abierto (CAA)" o "Cerrado (CCA)", "presion_kPa": float}
-                          ],
-                          "eta_t": float,
-                          "eta_p": float,
-                          "TH_K": float,
-                          "T0_K": float
-                        }
-                        Reglas: presiones en kPa (ej: 15 MPa = 15000, 4 MPa = 4000, 1.2 MPa = 1200, 250 kPa = 250, 10 kPa = 10).
-                        """
-                        res = client.models.generate_content(
-                            model="gemini-flash-latest",
-                            contents=[img, prompt],
-                            config=types.GenerateContentConfig(response_mime_type="application/json")
-                        )
-                        datos = json.loads(res.text)
-                        st.session_state["P_cald"] = float(datos.get("P_cald_kPa", st.session_state["P_cald"]))
-                        st.session_state["T_max"] = float(datos.get("T_max_C", st.session_state["T_max"]))
-                        st.session_state["P_cond"] = float(datos.get("P_cond_kPa", st.session_state["P_cond"]))
-                        st.session_state["tiene_recal"] = bool(datos.get("tiene_recal", False))
-                        if datos.get("P_recal_kPa"):
-                            st.session_state["P_recal"] = float(datos.get("P_recal_kPa"))
-                        if datos.get("T_recal_C"):
-                            st.session_state["T_recal"] = float(datos.get("T_recal_C"))
-                        fwh_l = datos.get("fwh_lista", [])
-                        st.session_state["num_fwh"] = len(fwh_l)
-                        st.session_state["fwh_data"] = [
-                            {"tipo": f.get("tipo", "Abierto (CAA)"), "presion": float(f.get("presion_kPa", 1000.0))}
-                            for f in fwh_l
-                        ]
-                        st.session_state["eta_t"] = float(datos.get("eta_t", 100.0))
-                        st.session_state["eta_p"] = float(datos.get("eta_p", 100.0))
-                        st.session_state["TH"] = float(datos.get("TH_K", 800.0))
-                        st.session_state["T0"] = float(datos.get("T0_K", 300.0))
-                        st.sidebar.success("¡Parámetros cargados con éxito!")
-                        st.rerun()
-                    except Exception as err:
-                        st.sidebar.error(f"Error al procesar la imagen: {err}")
-            else:
-                st.sidebar.warning("Servicio de lectura de imagen no disponible temporalmente.")
+            with st.spinner("Digitalizando parámetros termodinámicos..."):
+                try:
+                    prompt = """
+                    Analiza la imagen del ciclo térmico. Devuelve ÚNICAMENTE un JSON con:
+                    {
+                      "tipo_planta": "Central de Potencia" o "Cogeneracion",
+                      "P_cald_kPa": float,
+                      "T_max_C": float,
+                      "P_cond_kPa": float,
+                      "m_dot_kgs": float,
+                      "tiene_recal": bool,
+                      "P_recal_kPa": float o null,
+                      "T_recal_C": float o null,
+                      "num_fwh": int,
+                      "P_proc_kPa": float o null,
+                      "frac_byp": float o null,
+                      "frac_turb_proc": float o null
+                    }
+                    Reglas: presiones en kPa (ej: 15 MPa = 15000, 7 MPa = 7000, 500 kPa = 500, 10 kPa = 10).
+                    """
+                    res = client.models.generate_content(
+                        model="gemini-flash-latest",
+                        contents=[img, prompt],
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    datos = json.loads(res.text)
+                    st.session_state["P_cald"] = float(datos.get("P_cald_kPa", st.session_state["P_cald"]))
+                    st.session_state["T_max"] = float(datos.get("T_max_C", st.session_state["T_max"]))
+                    st.session_state["P_cond"] = float(datos.get("P_cond_kPa", st.session_state["P_cond"]))
+                    st.session_state["m_dot"] = float(datos.get("m_dot_kgs", st.session_state["m_dot"]))
+                    st.session_state["tiene_recal"] = bool(datos.get("tiene_recal", False))
+                    if datos.get("P_recal_kPa"):
+                        st.session_state["P_recal"] = float(datos.get("P_recal_kPa"))
+                    if datos.get("T_recal_C"):
+                        st.session_state["T_recal"] = float(datos.get("T_recal_C"))
+                    if datos.get("P_proc_kPa"):
+                        st.session_state["P_proc"] = float(datos.get("P_proc_kPa"))
+                        st.session_state["tipo_planta"] = "Planta de Cogeneración (Calor y Potencia)"
+                    st.sidebar.success("¡Parámetros cargados!")
+                    st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"Error procesando imagen: {e}")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("**Fronteras del Ciclo:**")
+st.sidebar.markdown("**Fronteras Térmicas Principales:**")
 P_cald = st.sidebar.number_input("Presión Caldera [kPa]", value=float(st.session_state["P_cald"]), step=500.0)
 T_max = st.sidebar.number_input("Temperatura Entrada Turbina [°C]", value=float(st.session_state["T_max"]), step=10.0)
 P_cond = st.sidebar.number_input("Presión Condensador [kPa]", value=float(st.session_state["P_cond"]), step=1.0)
+m_dot = st.sidebar.number_input("Flujo Másico Total (ṁ) [kg/s]", value=float(st.session_state["m_dot"]), step=1.0)
 
-st.sidebar.markdown("---")
-tiene_recal = st.sidebar.checkbox("¿Tiene Recalentamiento?", value=st.session_state["tiene_recal"])
-if tiene_recal:
-    P_recal = st.sidebar.number_input("Presión Recalentador [kPa]", value=float(st.session_state["P_recal"]), step=200.0)
-    T_recal = st.sidebar.number_input("Temp. Recalentamiento [°C]", value=float(st.session_state["T_recal"]), step=10.0)
-else:
-    P_recal, T_recal = 4000.0, 600.0
-
-st.sidebar.markdown("---")
-num_fwh = st.sidebar.number_input("Número de Calentadores (FWH)", min_value=0, max_value=8, value=int(st.session_state["num_fwh"]))
+# ==========================================
+# PARÁMETROS ESPECÍFICOS SEGÚN PLANTA
+# ==========================================
 fwh_configuracion = []
-for i in range(num_fwh):
-    st.sidebar.markdown(f"**Calentador #{i+1}:**")
-    t_def = "Cerrado (CCA)" if i % 2 == 0 else "Abierto (CAA)"
-    p_def = float(P_cald / (i + 2))
-    if i < len(st.session_state["fwh_data"]):
-        t_def = st.session_state["fwh_data"][i]["tipo"]
-        p_def = float(st.session_state["fwh_data"][i]["presion"])
-    tipo_sel = st.sidebar.selectbox(f"Tipo #{i+1}", ["Cerrado (CCA)", "Abierto (CAA)"], index=0 if "Cerrado" in t_def or "CCA" in t_def else 1, key=f"t_{i}")
-    p_sel = st.sidebar.number_input(f"Presión #{i+1} [kPa]", min_value=float(P_cond), max_value=float(P_cald), value=p_def, step=100.0, key=f"p_{i}")
-    fwh_configuracion.append({"tipo": tipo_sel, "presion": p_sel})
+tiene_recal = False
+P_recal, T_recal = 3750.0, 600.0
+P_proc, frac_byp, frac_turb_proc, modo_cogen = 500.0, 10.0, 70.0, ""
+
+if "Cogeneración" in tipo_planta:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Parámetros de Cogeneración:**")
+    modo_cogen = st.sidebar.selectbox(
+        "Modo de Operación:",
+        [
+            "Modo Operativo Normal (Extracción Combinada)",
+            "Demanda Máxima de Calor (100% Proceso)",
+            "Sin Demanda de Calor (100% Potencia Eléctrica)"
+        ]
+    )
+    P_proc = st.sidebar.number_input("Presión Calentador de Proceso [kPa]", value=500.0, step=50.0)
+    if "Normal" in modo_cogen:
+        frac_byp = st.sidebar.slider("Fracción Estrangulada en Válvula de Desvío (%)", 0.0, 50.0, 10.0, 1.0)
+        frac_turb_proc = st.sidebar.slider("Fracción Extraída en Turbina a P_proceso (%)", 0.0, 100.0, 70.0, 1.0)
+    elif "Máxima" in modo_cogen:
+        frac_byp, frac_turb_proc = 0.0, 100.0
+    else:
+        frac_byp, frac_turb_proc = 0.0, 0.0
+else:
+    st.sidebar.markdown("---")
+    tiene_recal = st.sidebar.checkbox("¿Tiene Recalentamiento?", value=st.session_state["tiene_recal"])
+    if tiene_recal:
+        recal_opt = st.sidebar.checkbox("⚡ Usar Presión Óptima de Recalentamiento (0.25 · P_cald)", value=st.session_state["recal_optimo"])
+        if recal_opt:
+            P_recal = 0.25 * P_cald
+            st.sidebar.info(f"Presión Óptima fijada: **{P_recal:.1f} kPa** ({P_recal/1000:.2f} MPa)")
+        else:
+            P_recal = st.sidebar.number_input("Presión Recalentador [kPa]", value=float(st.session_state["P_recal"]), step=100.0)
+        T_recal = st.sidebar.number_input("Temp. Recalentamiento [°C]", value=float(st.session_state["T_recal"]), step=10.0)
+
+    st.sidebar.markdown("---")
+    num_fwh = st.sidebar.number_input("Número de Calentadores (FWH)", min_value=0, max_value=8, value=int(st.session_state["num_fwh"]))
+    for i in range(num_fwh):
+        st.sidebar.markdown(f"**Calentador #{i+1}:**")
+        col_t, col_p = st.sidebar.columns([1.2, 1])
+        with col_t:
+            t_sel = st.selectbox(f"Tipo #{i+1}", ["Cerrado (CCA)", "Abierto (CAA)"], index=0 if i % 2 == 0 else 1, key=f"t_{i}")
+        with col_p:
+            p_sug = float(P_cald / (i + 2))
+            p_sel = st.number_input(f"P [kPa] #{i+1}", min_value=float(P_cond), max_value=float(P_cald), value=p_sug, step=100.0, key=f"p_{i}")
+        
+        dren_sel = "Mezcla Directa"
+        if "Cerrado" in t_sel:
+            dren_sel = st.sidebar.radio(f"Retorno Drenaje #{i+1}:", ["Trampa de Vapor (Cascada)", "Bomba de Drenaje (Adelante)"], key=f"dr_{i}")
+
+        fwh_configuracion.append({"tipo": t_sel, "presion": p_sel, "drenaje": dren_sel})
 
 with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
     eta_t = st.slider("Isentrópica Turbina (η_t)", 0.50, 1.00, float(st.session_state["eta_t"]/100.0), 0.01)
@@ -231,171 +264,197 @@ def get_T_safe(P_val, H_val):
         return CP.PropsSI('T', 'P', P_val, 'Q', 0, fluido) - 273.15
 
 def fmt_p(p_kpa):
-    return f"{p_kpa/1000:.1f} MPa" if p_kpa >= 1000 else f"{p_kpa:.0f} kPa"
+    return f"{p_kpa/1000:.2f} MPa" if p_kpa >= 1000 else f"{p_kpa:.0f} kPa"
 
 try:
-    h1 = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
-    s1 = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
-    v1 = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
-    T1 = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
+    # -------------------------------------------------------------
+    # MODELO A: PLANTA DE COGENERACIÓN (Çengel Ejemplo 10-8)
+    # -------------------------------------------------------------
+    if "Cogeneración" in tipo_planta:
+        P_proc_Pa = P_proc * 1e3
+        
+        # 1. Estado de entrada a turbina (vapor vivo)
+        h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
+        s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
+        
+        # 2. Expansión en turbina hacia P_proceso
+        h_proc_iso = CP.PropsSI('H', 'P', P_proc_Pa, 'S', s_in_turb, fluido)
+        h_proc_sal = h_in_turb - eta_t * (h_in_turb - h_proc_iso)
+        s_proc_sal = CP.PropsSI('S', 'P', P_proc_Pa, 'H', h_proc_sal, fluido)
+        T_proc_sal = get_T_safe(P_proc_Pa, h_proc_sal)
+        
+        # 3. Expansión continua hacia P_condensador
+        h_cond_iso = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_in_turb, fluido)
+        h_cond_in = h_in_turb - eta_t * (h_in_turb - h_cond_iso)
+        s_cond_in = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_cond_in, fluido)
+        T_cond_in = get_T_safe(P_cond_Pa, h_cond_in)
+        
+        # 4. Condensador (líquido saturado)
+        h_cond_out = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
+        s_cond_out = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
+        v_cond = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
+        T_cond_out = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
+        
+        # Bomba I: eleva líquido de P_cond a P_proc
+        w_b1 = (v_cond * (P_proc_Pa - P_cond_Pa)) / eta_p
+        h_b1_out = h_cond_out + w_b1
+        
+        # 5. Salida del calentador de proceso (líquido saturado a P_proceso)
+        hf_proc = CP.PropsSI('H', 'P', P_proc_Pa, 'Q', 0, fluido)
+        sf_proc = CP.PropsSI('S', 'P', P_proc_Pa, 'Q', 0, fluido)
+        vf_proc = 1 / CP.PropsSI('D', 'P', P_proc_Pa, 'Q', 0, fluido)
+        T_sat_proc = CP.PropsSI('T', 'P', P_proc_Pa, 'Q', 0, fluido) - 273.15
+        
+        # Bomba II: eleva el líquido del proceso de P_proc a P_cald
+        w_b2 = (vf_proc * (P_cald_Pa - P_proc_Pa)) / eta_p
+        h_b2_out = hf_proc + w_b2
+        
+        # Flujos másicos específicos
+        f_byp = frac_byp / 100.0
+        f_turb_in = 1.0 - f_byp
+        f_proc_turb = f_turb_in * (frac_turb_proc / 100.0)
+        f_cond = f_turb_in - f_proc_turb
+        f_proc_total = f_byp + f_proc_turb
+        
+        # Balances de Calor y Trabajo
+        # Calor de proceso entregado: vapor estrangulado (h_in_turb) + vapor de turbina (h_proc_sal) condensando a hf_proc
+        q_proc_especifico = f_byp * (h_in_turb - hf_proc) + f_proc_turb * (h_proc_sal - hf_proc)
+        Q_dot_proc = (m_dot * q_proc_especifico) / 1e3  # MW
+        
+        # Trabajo turbina
+        w_turb = f_turb_in * (h_in_turb - h_proc_sal) + f_cond * (h_proc_sal - h_cond_in)
+        w_bombas = f_cond * w_b1 + f_proc_total * w_b2
+        w_neto = w_turb - w_bombas
+        W_dot_neto = (m_dot * w_neto) / 1e3  # MW
+        
+        # Calor suministrado caldera
+        # El agua que entra a la caldera proviene de la mezcla de salida de bombas
+        h_in_cald = (f_cond * (h_b1_out + (v_cond * (P_cald_Pa - P_proc_Pa))/eta_p)) + (f_proc_total * h_b2_out)
+        q_in = h_in_turb - h_in_cald
+        Q_dot_in = (m_dot * q_in) / 1e3  # MW
+        
+        # Factor de Utilización (Métrica reina de cogeneración)
+        eps_u = ((W_dot_neto + Q_dot_proc) / Q_dot_in) * 100.0 if Q_dot_in > 0 else 0.0
+        eta_th = (W_dot_neto / Q_dot_in) * 100.0 if Q_dot_in > 0 else 0.0
+        w_rev = q_in * (1.0 - (T0 / TH))
+        eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
 
-    h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
-    s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
-
-    if tiene_recal:
-        h_rec_s = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-        h_rec_sal = h_in_turb - eta_t * (h_in_turb - h_rec_s)
-        s_rec_sal = CP.PropsSI('S', 'P', P_recal_Pa, 'H', h_rec_sal, fluido)
-        T_rec_sal = get_T_safe(P_recal_Pa, h_rec_sal)
-
-        h_rec_in2 = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-        s_rec_in2 = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-
-        h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_rec_in2, fluido)
-        h_out_turb = h_rec_in2 - eta_t * (h_rec_in2 - h_out_s)
-        w_t = (h_in_turb - h_rec_sal) + (h_rec_in2 - h_out_turb)
-        q_recal = h_rec_in2 - h_rec_sal
-        s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
-        T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
+    # -------------------------------------------------------------
+    # MODELO B: CICLO DE POTENCIA REGENERATIVO / RECALENTAMIENTO
+    # -------------------------------------------------------------
     else:
-        h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_in_turb, fluido)
-        h_out_turb = h_in_turb - eta_t * (h_in_turb - h_out_s)
-        w_t = h_in_turb - h_out_turb
-        q_recal = 0.0
-        s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
-        T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
+        h_cond_out = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
+        s_cond_out = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
+        v_cond = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
+        T_cond_out = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
 
-    w_b = v1 * (P_cald_Pa - P_cond_Pa) / eta_p
-    h2 = h1 + w_b
-    s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
-    T2 = get_T_safe(P_cald_Pa, h2)
-
-    q_in = (h_in_turb - h2) + q_recal
-    q_out = h_out_turb - h1
-    w_neto = w_t - w_b
-    eta_th = (w_neto / q_in) * 100.0
-
-    w_rev = q_in * (1.0 - (T0 / TH))
-    eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
-
-    # ========================================================
-    # MOTOR ANALÍTICO AUTÓNOMO: MEMORIA DE CÁLCULO
-    # ========================================================
-    def generar_memoria_analitica_nativa():
-        fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
-        
-        extracciones_info = []
-        for idx, f in enumerate(fwh_ord):
-            p_kpa = f['presion']
-            p_pa = p_kpa * 1e3
-            s_ref = s_in_turb if (tiene_recal and p_pa >= P_recal_Pa) else (s_rec_in2 if tiene_recal else s_in_turb)
-            h_iso = CP.PropsSI('H', 'P', p_pa, 'S', s_ref, fluido)
-            h_real = (h_in_turb - eta_t * (h_in_turb - h_iso)) if (tiene_recal and p_pa >= P_recal_Pa) else ((h_rec_in2 if tiene_recal else h_in_turb) - eta_t * ((h_rec_in2 if tiene_recal else h_in_turb) - h_iso))
-            t_ext = get_T_safe(p_pa, h_real)
-            hf_sat = CP.PropsSI('H', 'P', p_pa, 'Q', 0, fluido)
-            T_sat_val = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
-            
-            extracciones_info.append({
-                "idx": idx + 1,
-                "nombre": f"FWH #{idx+1}",
-                "tipo": f['tipo'],
-                "P_kPa": p_kpa,
-                "T_sat": T_sat_val,
-                "h_ext": h_real / 1e3,
-                "hf_sat": hf_sat / 1e3,
-                "s_ext": s_ref / 1e3
-            })
-
-        y_valores = []
-        if len(extracciones_info) > 0:
-            h_anterior = h1 / 1e3
-            for ext in reversed(extracciones_info):
-                delta_h_cal = ext["hf_sat"] - h_anterior
-                delta_h_vap = ext["h_ext"] - ext["hf_sat"]
-                y_i = (delta_h_cal / delta_h_vap) if delta_h_vap > 0 else 0.08
-                y_i = max(0.02, min(0.20, y_i))
-                y_valores.insert(0, y_i)
-                h_anterior = ext["hf_sat"]
-        
-        y_condensador = max(0.40, 1.0 - sum(y_valores))
-
-        if len(y_valores) == 3:
-            y1, y2, y3 = y_valores[0], y_valores[1], y_valores[2]
-            w_turb_real = (h_in_turb/1e3 - extracciones_info[0]["h_ext"]) + \
-                          (1.0 - y1) * (extracciones_info[0]["h_ext"] - extracciones_info[1]["h_ext"]) + \
-                          (1.0 - y1 - y2) * (extracciones_info[1]["h_ext"] - extracciones_info[2]["h_ext"]) + \
-                          y_condensador * (extracciones_info[2]["h_ext"] - h_out_turb/1e3)
-            if tiene_recal:
-                w_turb_real += (1.0 - y1) * (h_rec_in2/1e3 - h_rec_sal/1e3)
-        else:
-            w_turb_real = w_t / 1e3
-
-        w_bomba_total = (w_b / 1e3) * (0.85 if len(y_valores) > 0 else 1.0)
-        w_neto_real = w_turb_real - w_bomba_total
-        
-        hf_superior = extracciones_info[0]["hf_sat"] if len(extracciones_info) > 0 else (h2 / 1e3)
-        q_in_real = (h_in_turb/1e3 - hf_superior) + (q_recal/1e3)
-        eta_th_real = (w_neto_real / q_in_real) * 100.0
-
-        w_rev_real = q_in_real * (1.0 - (T0 / TH))
-        eta_II_real = (w_neto_real / w_rev_real) * 100.0 if w_rev_real > 0 else 0.0
-
-        x_dest_total = q_in_real - w_neto_real
-
-        doc = f"""### 1. Parámetros de Diseño y Fronteras del Sistema
-* **Presión de Caldera:** {P_cald:.1f} kPa ({P_cald/1000:.2f} MPa)
-* **Temperatura de Entrada Turbina ($T_{{max}}$):** {T_max:.1f} °C ({T_max+273.15:.2f} K)
-* **Presión de Condensación:** {P_cond:.1f} kPa
-* **Recalentamiento Intermedio:** {"Sí, a " + str(P_recal) + " kPa y " + str(T_recal) + " °C" if tiene_recal else "No"}
-* **Calentadores de Agua de Alimentación (FWH):** {num_fwh} configurados
-* **Rendimientos Isentrópicos:** Turbina $\eta_t = {eta_t*100:.1f}\\%$, Bombas $\eta_p = {eta_p*100:.1f}\\%$
-* **Entorno Térmico:** Fuente $T_H = {TH:.1f}$ K, Ambiente $T_0 = {T0:.1f}$ K
-
----
-
-### 2. Estados Termodinámicos Fundamentales
-| Estado | Presión [kPa] | Temp. [°C] | Entalpía, $h$ [kJ/kg] | Entropía, $s$ [kJ/kg·K] | Fase |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Salida Condensador (1)** | {P_cond:.1f} | {T1:.1f} | **{h1/1e3:.2f}** | **{s1/1e3:.4f}** | Líquido sat. ($Q=0$) |
-| **Salida Bomba Principal** | {P_cald:.1f} | {T2:.1f} | **{h2/1e3:.2f}** | **{s2/1e3:.4f}** | Líquido comprimido |
-| **Entrada Turbina AP** | {P_cald:.1f} | {T_max:.1f} | **{h_in_turb/1e3:.2f}** | **{s_in_turb/1e3:.4f}** | Vapor sobrecalentado |
-| **Escape al Condensador** | {P_cond:.1f} | {T_out_turb:.1f} | **{h_out_turb/1e3:.2f}** | **{s_out_turb/1e3:.4f}** | Vapor húmedo / mezcla |
-"""
+        h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
+        s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
 
         if tiene_recal:
-            doc += f"""| **Salida Turbina AP (Recal.)** | {P_recal:.1f} | {T_rec_sal:.1f} | **{h_rec_sal/1e3:.2f}** | **{s_rec_sal/1e3:.4f}** | Vapor sobrecalentado |
-| **Entrada Turbina BP (Recal.)** | {P_recal:.1f} | {T_recal:.1f} | **{h_rec_in2/1e3:.2f}** | **{s_rec_in2/1e3:.4f}** | Vapor sobrecalentado |
-"""
+            h_rec_s = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
+            h_rec_sal = h_in_turb - eta_t * (h_in_turb - h_rec_s)
+            s_rec_sal = CP.PropsSI('S', 'P', P_recal_Pa, 'H', h_rec_sal, fluido)
+            T_rec_sal = get_T_safe(P_recal_Pa, h_rec_sal)
 
-        if len(extracciones_info) > 0:
-            doc += """\n---\n\n### 3. Balance de Masa y Energía en los Calentadores (FWH)\n"""
-            doc += "Aplicando la Primera Ley de la Termodinámica en cada calentador en régimen estacionario:\n\n"
-            for ext, y_val in zip(extracciones_info, y_valores):
-                doc += f"* **{ext['nombre']} ({ext['tipo']}):** $P = {ext['P_kPa']:.0f}$ kPa, $T_{{sat}} = {ext['T_sat']:.1f}$ °C\n"
-                doc += f"  * Entalpía de vapor extraído: $h_{{ext}} = {ext['h_ext']:.2f}$ kJ/kg\n"
-                doc += f"  * Entalpía de líquido saturado: $h_f = {ext['hf_sat']:.2f}$ kJ/kg\n"
-                doc += f"  * **Fracción de masa extraída ($y_{ext['idx']}$):** **{y_val:.4f}** ({(y_val*100):.2f}% del flujo total)\n\n"
-            doc += f"* **Fracción que alcanza el Condensador ($1 - \sum y_i$):** **{y_condensador:.4f}** ({(y_condensador*100):.2f}%)\n"
+            h_rec_in2 = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
+            s_rec_in2 = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
 
-        doc += f"""\n---\n\n### 4. Balance de Energía y Desempeño Térmico (1ra Ley)
-* **Trabajo total de turbinas ($w_t$):** **{w_turb_real:.2f} kJ/kg**
-* **Trabajo consumido por bombas ($w_b$):** **{w_bomba_total:.2f} kJ/kg**
-* **Trabajo neto del ciclo ($w_{{neto}} = w_t - w_b$):** **{w_neto_real:.2f} kJ/kg**
-* **Calor total suministrado ($q_{{in}}$):** **{q_in_real:.2f} kJ/kg**
-* **Eficiencia Térmica ($\eta_{{th}} = w_{{neto}} / q_{{in}}$):** **{eta_th_real:.2f} %**
+            h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_rec_in2, fluido)
+            h_out_turb = h_rec_in2 - eta_t * (h_rec_in2 - h_out_s)
+            w_t = (h_in_turb - h_rec_sal) + (h_rec_in2 - h_out_turb)
+            q_recal = h_rec_in2 - h_rec_sal
+            s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
+            T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
+        else:
+            h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_in_turb, fluido)
+            h_out_turb = h_in_turb - eta_t * (h_in_turb - h_out_s)
+            w_t = h_in_turb - h_out_turb
+            q_recal = 0.0
+            s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
+            T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
+
+        w_b = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
+        h2 = h_cond_out + w_b
+        s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
+        T2 = get_T_safe(P_cald_Pa, h2)
+
+        q_in = (h_in_turb - h2) + q_recal
+        w_neto = w_t - w_b
+        W_dot_neto = (m_dot * w_neto) / 1e3
+        Q_dot_in = (m_dot * q_in) / 1e3
+        Q_dot_proc = 0.0
+        eps_u = (w_neto / q_in) * 100.0
+        eta_th = eps_u
+        w_rev = q_in * (1.0 - (T0 / TH))
+        eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
+
+    # ==========================================
+    # GENERADOR DE MEMORIA ANALÍTICA
+    # ==========================================
+    def generar_memoria_analitica_completa():
+        if "Cogeneración" in tipo_planta:
+            return f"""### 1. Memoria de Cálculo: Planta de Cogeneración Industrial
+* **Flujo másico total en caldera ($\dot{{m}}$):** {m_dot:.2f} kg/s
+* **Condición de vapor vivo:** $P = {P_cald:.0f}\text{{ kPa}}$ ({fmt_p(P_cald)}), $T = {T_max:.1f}\ ^\circ\text{{C}}$
+  * Entalpía de vapor vivo ($h_1$): **{h_in_turb/1e3:.2f} kJ/kg**
+* **Presión del calentador de proceso ($P_{{proc}}$):** {P_proc:.0f} kPa ({fmt_p(P_proc)})
+  * Entalpía extracción turbina: **{h_proc_sal/1e3:.2f} kJ/kg**
+  * Entalpía líquido saturado proceso ($h_{{f,proc}}$): **{hf_proc/1e3:.2f} kJ/kg**
+* **Condición del Condensador:** $P = {P_cond:.1f}\text{{ kPa}}$
+  * Entalpía de escape turbina: **{h_cond_in/1e3:.2f} kJ/kg**
+  * Entalpía líquido saturado ($h_{{f,cond}}$): **{h_cond_out/1e3:.2f} kJ/kg**
 
 ---
 
-### 5. Análisis de Exergía y Segunda Ley
-* **Trabajo reversible máximo ($w_{{rev}} = q_{{in}}(1 - T_0/T_H)$):** **{w_rev_real:.2f} kJ/kg**
-* **Destrucción de Exergía Total del Ciclo ($x_{{dest, total}}$):** **{x_dest_total:.2f} kJ/kg**
-* **Eficiencia de la Segunda Ley ($\eta_{{II}} = w_{{neto}} / w_{{rev}}$):** **{eta_II_real:.2f} %**
+### 2. Distribución de Flujos Másicos y Balances
+* **Fracción estrangulada en válvula de desvío ($f_{{byp}}$):** **{f_byp*100:.1f} %** ({m_dot*f_byp:.2f} kg/s)
+* **Fracción hacia calentador de proceso desde turbina ($f_{{proc,turb}}$):** **{f_proc_turb*100:.1f} %** ({m_dot*f_proc_turb:.2f} kg/s)
+* **Fracción total a proceso:** **{f_proc_total*100:.1f} %** ({m_dot*f_proc_total:.2f} kg/s)
+* **Fracción remanente al condensador:** **{f_cond*100:.1f} %** ({m_dot*f_cond:.2f} kg/s)
+
+---
+
+### 3. Resultados Energéticos y Factor de Utilización
+* **Tasa de Calor Suministrado ($\dot{{Q}}_{{in}}$):** **{Q_dot_in:.2f} MW**
+* **Tasa de Suministro de Calor de Proceso ($\dot{{Q}}_{{proceso}}$):** **{Q_dot_proc:.2f} MW**
+* **Potencia Neta Generada ($\dot{{W}}_{{neto}}$):** **{W_dot_neto:.2f} MW**
+* **Eficiencia Térmica de Generación ($\eta_{{th}}$):** **{eta_th:.2f} %**
+* **Factor de Utilización ($\epsilon_u$):**
+  $$\epsilon_u = \\frac{{\dot{{W}}_{{neto}} + \dot{{Q}}_{{proceso}}}}{{\dot{{Q}}_{{in}}}} = \\mathbf{{{eps_u:.2f} \\%}}$$
 """
-        return doc
+        else:
+            fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
+            doc = f"""### 1. Parámetros de Diseño y Fronteras del Sistema
+* **Presión de Caldera:** {P_cald:.1f} kPa ({fmt_p(P_cald)})
+* **Temperatura Entrada Turbina ($T_{{max}}$):** {T_max:.1f} °C
+* **Presión de Condensación:** {P_cond:.1f} kPa
+* **Recalentamiento Intermedio:** {"Sí, a " + str(P_recal) + " kPa (" + fmt_p(P_recal) + ") y " + str(T_recal) + " °C" if tiene_recal else "No"}
+* **Calentadores de Agua de Alimentación (FWH):** {num_fwh} configurados
+* **Rendimientos Isentrópicos:** Turbina $\eta_t = {eta_t*100:.1f}\\%$, Bombas $\eta_p = {eta_p*100:.1f}\\%$
+
+---
+
+### 2. Configuración y Trampas de Vapor en Calentadores
+"""
+            for idx, f in enumerate(fwh_ord):
+                doc += f"* **Calentador #{idx+1} ({f['tipo']}):** $P = {f['presion']:.0f}$ kPa ({fmt_p(f['presion'])})\n"
+                doc += f"  * Mecanismo de drenaje: **{f['drenaje']}**\n"
+            
+            doc += f"""\n---
+
+### 3. Resultados Energéticos y de Segunda Ley
+* **Trabajo neto del ciclo ($w_{{neto}}$):** **{w_neto/1e3:.2f} kJ/kg**
+* **Calor total suministrado ($q_{{in}}$):** **{q_in/1e3:.2f} kJ/kg**
+* **Potencia Total ($\dot{{W}}_{{neto}}$ para $\dot{{m}} = {m_dot:.1f}\text{{ kg/s}}$):** **{W_dot_neto:.2f} MW**
+* **Eficiencia Térmica ($\eta_{{th}}$):** **{eta_th:.2f} %**
+* **Eficiencia de la Segunda Ley ($\eta_{{II}}$):** **{eta_II:.2f} %**
+"""
+            return doc
 
     st.sidebar.markdown("---")
     if st.sidebar.button("⚡ Calcular Procedimiento Paso a Paso", type="primary", use_container_width=True):
-        st.session_state["solucion_texto"] = generar_memoria_analitica_nativa()
+        st.session_state["solucion_texto"] = generar_memoria_analitica_completa()
         st.sidebar.success("¡Memoria de cálculo generada!")
         st.rerun()
 
@@ -405,13 +464,10 @@ try:
     tab_ts, tab_estados, tab_procedimiento = st.tabs([
         "📈 Diagrama T-s Interactivo", 
         "📋 Estados Termodinámicos", 
-        "📝 Procedimiento / Incisos"
+        "📝 Memoria de Cálculo"
     ])
 
     with tab_ts:
-        str_pcald = fmt_p(P_cald)
-        str_pcond = fmt_p(P_cond)
-
         T_crit = CP.PropsSI('Tcrit', fluido)
         T_campana = np.linspace(273.16, T_crit - 0.2, 250)
         s_liq = [CP.PropsSI('S', 'T', t, 'Q', 0, fluido)/1e3 for t in T_campana]
@@ -419,6 +475,7 @@ try:
 
         fig = go.Figure()
 
+        # Campana
         fig.add_trace(go.Scatter(
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
@@ -434,156 +491,206 @@ try:
         T_sup = np.linspace(T_sat_cald + 0.5, T_max, 30)
         s_sup = [CP.PropsSI('S', 'P', P_cald_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
 
-        flechas_anotaciones = [
-            dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
-            dict(x=(s1/1e3 + s_out_turb/1e3)/2, y=T1 + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
-        ]
+        # ---------------------------------------------------------
+        # TRAZADO T-s: COGENERACIÓN
+        # ---------------------------------------------------------
+        if "Cogeneración" in tipo_planta:
+            pt_cond_liq = (s_cond_out/1e3, T_cond_out)
+            pt_b1 = (s_cond_out/1e3, T_cond_out + 20.0)
+            pt_proc_liq = (sf_proc/1e3, T_sat_proc)
+            pt_b2 = (sf_proc/1e3, T_sat_proc + 25.0)
+            pt_in = (s_in_turb/1e3, T_max)
+            pt_ext = (s_proc_sal/1e3, T_proc_sal)
+            pt_esc = (s_cond_in/1e3, T_cond_in)
 
-        fwh_ordenados = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
+            # Ciclo de potencia
+            x_cogen = [pt_cond_liq[0], pt_b1[0], pt_proc_liq[0], pt_b2[0], s_f_cald, s_g_cald] + list(s_sup) + [pt_in[0], pt_ext[0], pt_esc[0], pt_cond_liq[0]]
+            y_cogen = [pt_cond_liq[1], pt_b1[1], pt_proc_liq[1], pt_b2[1], T_sat_cald, T_sat_cald] + list(T_sup) + [pt_in[1], pt_ext[1], pt_esc[1], pt_cond_liq[1]]
 
-        pts_x, pts_y, pts_txt, pts_pos = [], [], [], []
-        contador = 1
+            fig.add_trace(go.Scatter(
+                x=x_cogen, y=y_cogen,
+                mode='lines', line=dict(color=color_ciclo, width=2.4),
+                name='Ciclo de Potencia'
+            ))
 
-        pt1 = (s1/1e3, T1)
-        pt2 = (s1/1e3, T1 + 22.0)
-        pts_x.extend([pt1[0], pt2[0]])
-        pts_y.extend([pt1[1], pt2[1]])
-        pts_txt.extend([str(contador), str(contador+1)])
-        pts_pos.extend(["bottom left", "top left"])
-        contador += 2
+            # Calentador de Proceso (Condensación a P_proc)
+            sg_proc = CP.PropsSI('S', 'P', P_proc_Pa, 'Q', 1, fluido) / 1e3
+            fig.add_trace(go.Scatter(
+                x=[pt_ext[0], sg_proc, pt_proc_liq[0]],
+                y=[pt_ext[1], T_sat_proc, pt_proc_liq[1]],
+                mode='lines', line=dict(color='#ff9f1c', width=2.2, dash='solid'),
+                name='Calor de Proceso'
+            ))
 
-        pts_liq = [pt1, pt2]
-        fwh_inv = list(reversed(fwh_ordenados))
+            # Válvula de estrangulamiento (Bypass h=cte)
+            fig.add_trace(go.Scatter(
+                x=[pt_in[0], pt_ext[0] + 0.3],
+                y=[pt_in[1], T_sat_proc],
+                mode='lines', line=dict(color='#ef4444', width=1.8, dash='dot'),
+                name='Válvula de Desvío (Bypass)'
+            ))
 
-        for f in fwh_inv:
-            p_pa = f['presion'] * 1e3
-            t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
-            s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
+            pts_x = [pt_cond_liq[0], pt_proc_liq[0], pt_b2[0], pt_in[0], pt_ext[0], pt_esc[0]]
+            pts_y = [pt_cond_liq[1], pt_proc_liq[1], pt_b2[1], pt_in[1], pt_ext[1], pt_esc[1]]
+            pts_txt = ["Condensador", "Calentador Proceso", "Salida Bomba", "Entrada Turbina", "Extracción Proceso", "Escape"]
 
-            t_tr = np.linspace(pts_liq[-1][1], t_sf, 12)
-            s_tr = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_tr]
-            for sx, ty in zip(s_tr, t_tr):
-                pts_liq.append((sx, ty))
+            fig.add_trace(go.Scatter(
+                x=pts_x, y=pts_y, mode='markers+text',
+                marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
+                text=pts_txt, textposition="top right",
+                textfont=dict(color='white', size=10, family="Inter", weight='bold')
+            ))
 
-            pt_f = (s_sf, t_sf)
-            pt_b = (s_sf, t_sf + 16.0)
-            pts_liq.extend([pt_f, pt_b])
+            anotaciones = [
+                dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{fmt_p(P_cald)}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
+                dict(x=(pt_proc_liq[0] + pt_ext[0])/2, y=T_sat_proc + 10, text=f"<b>Proceso: {fmt_p(P_proc)} ◀</b>", showarrow=False, font=dict(color='#ff9f1c', size=11)),
+                dict(x=(pt_cond_liq[0] + pt_esc[0])/2, y=T_cond_out + 10, text=f"<b>{fmt_p(P_cond)}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
+            ]
 
-            pts_x.extend([pt_f[0], pt_b[0]])
-            pts_y.extend([pt_f[1], pt_b[1]])
+        # ---------------------------------------------------------
+        # TRAZADO T-s: POTENCIA REGENERATIVA Y TRAMPAS
+        # ---------------------------------------------------------
+        else:
+            fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
+            pts_x, pts_y, pts_txt, pts_pos = [], [], [], []
+            contador = 1
+
+            pt1 = (s_cond_out/1e3, T_cond_out)
+            pt2 = (s_cond_out/1e3, T_cond_out + 22.0)
+            pts_x.extend([pt1[0], pt2[0]])
+            pts_y.extend([pt1[1], pt2[1]])
             pts_txt.extend([str(contador), str(contador+1)])
             pts_pos.extend(["bottom left", "top left"])
             contador += 2
 
-        t_cald = np.linspace(pts_liq[-1][1], T_sat_cald, 18)
-        s_cald = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_cald]
-        for sx, ty in zip(s_cald, t_cald):
-            pts_liq.append((sx, ty))
+            pts_liq = [pt1, pt2]
+            fwh_inv = list(reversed(fwh_ord))
 
-        pt_in_t = (s_in_turb/1e3, T_max)
-        pts_cald = [(s_f_cald, T_sat_cald), (s_g_cald, T_sat_cald)] + list(zip(s_sup, T_sup))
+            for f in fwh_inv:
+                p_pa = f['presion'] * 1e3
+                t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
+                s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
 
-        pts_x.append(pt_in_t[0])
-        pts_y.append(pt_in_t[1])
-        pts_txt.append(str(contador))
-        pts_pos.append("middle right")
-        contador += 1
+                t_tr = np.linspace(pts_liq[-1][1], t_sf, 12)
+                s_tr = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_tr]
+                for sx, ty in zip(s_tr, t_tr):
+                    pts_liq.append((sx, ty))
 
-        x_main = [p[0] for p in pts_liq] + [p[0] for p in pts_cald]
-        y_main = [p[1] for p in pts_liq] + [p[1] for p in pts_cald]
+                pt_f = (s_sf, t_sf)
+                pt_b = (s_sf, t_sf + 16.0)
+                pts_liq.extend([pt_f, pt_b])
 
-        if tiene_recal:
-            h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-            t_rec_sal_val = get_T_safe(P_recal_Pa, h_rec_iso)
-            pt_rec_s = (s_in_turb/1e3, t_rec_sal_val)
-            x_main.append(pt_rec_s[0])
-            y_main.append(pt_rec_s[1])
-            pts_x.append(pt_rec_s[0])
-            pts_y.append(pt_rec_s[1])
+                pts_x.extend([pt_f[0], pt_b[0]])
+                pts_y.extend([pt_f[1], pt_b[1]])
+                pts_txt.extend([str(contador), str(contador+1)])
+                pts_pos.extend(["bottom left", "top left"])
+                contador += 2
+
+            t_cald = np.linspace(pts_liq[-1][1], T_sat_cald, 18)
+            s_cald = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_cald]
+            for sx, ty in zip(s_cald, t_cald):
+                pts_liq.append((sx, ty))
+
+            pt_in_t = (s_in_turb/1e3, T_max)
+            pts_cald = [(s_f_cald, T_sat_cald), (s_g_cald, T_sat_cald)] + list(zip(s_sup, T_sup))
+
+            pts_x.append(pt_in_t[0])
+            pts_y.append(pt_in_t[1])
             pts_txt.append(str(contador))
             pts_pos.append("middle right")
             contador += 1
 
-            T_rec_c = np.linspace(t_rec_sal_val + 0.5, T_recal, 15)
-            s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_rec_c]
-            for sx, ty in zip(s_rec_c, T_rec_c):
-                x_main.append(sx)
-                y_main.append(ty)
+            x_main = [p[0] for p in pts_liq] + [p[0] for p in pts_cald]
+            y_main = [p[1] for p in pts_liq] + [p[1] for p in pts_cald]
 
-            pt_in_bp = (s_rec_in2/1e3, T_recal)
-            pts_x.append(pt_in_bp[0])
-            pts_y.append(pt_in_bp[1])
+            if tiene_recal:
+                h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
+                t_rec_sal_val = get_T_safe(P_recal_Pa, h_rec_iso)
+                pt_rec_s = (s_in_turb/1e3, t_rec_sal_val)
+                x_main.append(pt_rec_s[0])
+                y_main.append(pt_rec_s[1])
+                pts_x.append(pt_rec_s[0])
+                pts_y.append(pt_rec_s[1])
+                pts_txt.append(str(contador))
+                pts_pos.append("middle right")
+                contador += 1
+
+                T_rec_c = np.linspace(t_rec_sal_val + 0.5, T_recal, 15)
+                s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_rec_c]
+                for sx, ty in zip(s_rec_c, T_rec_c):
+                    x_main.append(sx)
+                    y_main.append(ty)
+
+                pt_in_bp = (s_rec_in2/1e3, T_recal)
+                pts_x.append(pt_in_bp[0])
+                pts_y.append(pt_in_bp[1])
+                pts_txt.append(str(contador))
+                pts_pos.append("middle right")
+                contador += 1
+
+            for idx, f in enumerate(fwh_ord):
+                p_pa = f['presion'] * 1e3
+                t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
+                s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
+                s_sg = CP.PropsSI('S', 'P', p_pa, 'Q', 1, fluido) / 1e3
+                h_g = CP.PropsSI('H', 'P', p_pa, 'Q', 1, fluido)
+
+                s_origen = (s_in_turb/1e3) if (tiene_recal and p_pa >= P_recal_Pa) else (s_rec_in2/1e3 if tiene_recal else s_in_turb/1e3)
+                h_ext = CP.PropsSI('H', 'P', p_pa, 'S', s_origen * 1e3, fluido)
+                t_ext = get_T_safe(p_pa, h_ext)
+                pt_ext = (s_origen, t_ext)
+
+                if h_ext > h_g + 2000.0 and t_ext > t_sf + 1.0:
+                    t_iso = np.linspace(t_ext, t_sf + 0.6, 8)
+                    s_iso = [CP.PropsSI('S', 'P', p_pa, 'T', t + 273.15, fluido)/1e3 for t in t_iso]
+                    x_ext = s_iso + [s_sg, s_sf]
+                    y_ext = list(t_iso) + [t_sf, t_sf]
+                else:
+                    x_ext = [s_origen, s_sf]
+                    y_ext = [t_sf, t_sf]
+
+                # Distinguir línea si tiene trampa de vapor
+                estilo_linea = 'dash' if "Trampa" in f['drenaje'] else 'solid'
+                fig.add_trace(go.Scatter(
+                    x=x_ext, y=y_ext, mode='lines',
+                    line=dict(color=color_ciclo, width=1.8, dash=estilo_linea),
+                    name=f'Extracción {fmt_p(p_pa/1000)} ({f["drenaje"]})',
+                    hoverinfo='skip'
+                ))
+
+                pts_x.append(pt_ext[0])
+                pts_y.append(pt_ext[1])
+                pts_txt.append(str(contador))
+                pts_pos.append("middle right")
+                contador += 1
+
+            pt_esc = (s_out_turb/1e3, T_out_turb)
+            x_main.extend([pt_esc[0], pt1[0]])
+            y_main.extend([pt_esc[1], pt1[1]])
+
+            pts_x.append(pt_esc[0])
+            pts_y.append(pt_esc[1])
             pts_txt.append(str(contador))
             pts_pos.append("middle right")
-            contador += 1
-
-        for idx, f in enumerate(fwh_ordenados):
-            p_pa = f['presion'] * 1e3
-            t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
-            s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
-            s_sg = CP.PropsSI('S', 'P', p_pa, 'Q', 1, fluido) / 1e3
-            h_g = CP.PropsSI('H', 'P', p_pa, 'Q', 1, fluido)
-
-            s_origen = (s_in_turb/1e3) if (tiene_recal and p_pa >= P_recal_Pa) else (s_rec_in2/1e3 if tiene_recal else s_in_turb/1e3)
-            h_ext = CP.PropsSI('H', 'P', p_pa, 'S', s_origen * 1e3, fluido)
-            t_ext = get_T_safe(p_pa, h_ext)
-            pt_ext = (s_origen, t_ext)
-
-            if h_ext > h_g + 2000.0 and t_ext > t_sf + 1.0:
-                t_iso = np.linspace(t_ext, t_sf + 0.6, 8)
-                s_iso = [CP.PropsSI('S', 'P', p_pa, 'T', t + 273.15, fluido)/1e3 for t in t_iso]
-                x_ext = s_iso + [s_sg, s_sf]
-                y_ext = list(t_iso) + [t_sf, t_sf]
-            else:
-                x_ext = [s_origen, s_sf]
-                y_ext = [t_sf, t_sf]
 
             fig.add_trace(go.Scatter(
-                x=x_ext,
-                y=y_ext,
-                mode='lines',
-                line=dict(color=color_ciclo, width=1.8, dash='solid'),
-                name=f'Extracción {fmt_p(p_pa/1000)}',
-                hoverinfo='skip'
+                x=x_main, y=y_main, mode='lines',
+                line=dict(color=color_ciclo, width=2.4),
+                name='Ciclo Principal', hoverinfo='skip'
             ))
 
-            pts_x.append(pt_ext[0])
-            pts_y.append(pt_ext[1])
-            pts_txt.append(str(contador))
-            pts_pos.append("middle right")
-            contador += 1
+            fig.add_trace(go.Scatter(
+                x=pts_x, y=pts_y, mode='markers+text',
+                marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
+                text=pts_txt, textposition=pts_pos,
+                textfont=dict(color='white', size=11, family="Inter", weight='bold'),
+                name='Estados'
+            ))
 
-            flechas_anotaciones.append(
-                dict(x=(s_sf + s_sg)/2, y=t_sf + 8, text=f"<b>{fmt_p(p_pa/1000)}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
-            )
-
-        pt_esc = (s_out_turb/1e3, T_out_turb)
-        x_main.extend([pt_esc[0], pt1[0]])
-        y_main.extend([pt_esc[1], pt1[1]])
-
-        pts_x.append(pt_esc[0])
-        pts_y.append(pt_esc[1])
-        pts_txt.append(str(contador))
-        pts_pos.append("middle right")
-
-        fig.add_trace(go.Scatter(
-            x=x_main, y=y_main,
-            mode='lines',
-            line=dict(color=color_ciclo, width=2.4),
-            name='Ciclo Principal',
-            hoverinfo='skip'
-        ))
-
-        fig.add_trace(go.Scatter(
-            x=pts_x, y=pts_y,
-            mode='markers+text',
-            marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
-            text=pts_txt,
-            textposition=pts_pos,
-            textfont=dict(color='white', size=11, family="Inter", weight='bold'),
-            name='Estados',
-            hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"
-        ))
+            anotaciones = [
+                dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{fmt_p(P_cald)}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
+                dict(x=(s_cond_out/1e3 + s_out_turb/1e3)/2, y=T_cond_out + 10, text=f"<b>{fmt_p(P_cond)}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
+            ]
 
         fig.update_layout(
             paper_bgcolor='#111317',
@@ -592,56 +699,46 @@ try:
             xaxis=dict(
                 title=dict(text='s [kJ/kg · K]', font=dict(color='#888888', size=11, family='Inter')),
                 tickfont=dict(color='#888888', size=10),
-                gridcolor='#1e2229',
-                zeroline=False,
-                showgrid=True,
-                gridwidth=1,
-                range=[0.0, 9.2]
+                gridcolor='#1e2229', zeroline=False, showgrid=True, gridwidth=1, range=[0.0, 9.2]
             ),
             yaxis=dict(
                 title=dict(text='T [°C]', font=dict(color='#888888', size=11, family='Inter')),
                 tickfont=dict(color='#888888', size=10),
-                gridcolor='#1e2229',
-                zeroline=False,
-                showgrid=True,
-                gridwidth=1,
+                gridcolor='#1e2229', zeroline=False, showgrid=True, gridwidth=1,
                 range=[-10, max(660.0, T_max + 40.0)]
             ),
             showlegend=False,
             height=580,
-            annotations=flechas_anotaciones
+            annotations=anotaciones
         )
         st.plotly_chart(fig, use_container_width=True)
 
     with tab_estados:
-        st.markdown("#### Tabla de Estados Termodinámicos Principales")
-        filas = [
-            {"Estado": "1 (Salida Condensador)", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T1:.1f}", "h [kJ/kg]": f"{h1/1e3:.2f}", "s [kJ/kg·K]": f"{s1/1e3:.4f}"},
-            {"Estado": "2 (Salida Bomba Principal)", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T2:.1f}", "h [kJ/kg]": f"{h2/1e3:.2f}", "s [kJ/kg·K]": f"{s2/1e3:.4f}"},
-            {"Estado": "Entrada Turbina AP", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T_max:.1f}", "h [kJ/kg]": f"{h_in_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_in_turb/1e3:.4f}"},
-            {"Estado": "Salida Turbina / Condensador", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_out_turb:.1f}", "h [kJ/kg]": f"{h_out_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_out_turb/1e3:.4f}"}
-        ]
-        st.dataframe(filas, use_container_width=True, hide_index=True)
-
-        if num_fwh > 0:
-            st.markdown("#### Calentadores FWH Configurados")
-            t_fwh = []
-            for idx, c in enumerate(fwh_configuracion):
-                t_fwh.append({
-                    "Calentador": f"FWH #{idx+1}",
-                    "Tipo": c["tipo"],
-                    "P [kPa]": f"{c['presion']:.0f}",
-                    "P [MPa]": f"{(c['presion']/1000.0):.2f}"
-                })
-            st.dataframe(t_fwh, use_container_width=True, hide_index=True)
+        st.markdown(f"#### Estados Termodinámicos Fundamentales ({tipo_planta})")
+        if "Cogeneración" in tipo_planta:
+            filas_cogen = [
+                {"Equipo / Punto": "1. Entrada Turbina (Caldera)", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T_max:.1f}", "h [kJ/kg]": f"{h_in_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_in_turb/1e3:.4f}"},
+                {"Equipo / Punto": "2. Extracción Turbina a Proceso", "P [kPa]": f"{P_proc:.1f}", "T [°C]": f"{T_proc_sal:.1f}", "h [kJ/kg]": f"{h_proc_sal/1e3:.2f}", "s [kJ/kg·K]": f"{s_proc_sal/1e3:.4f}"},
+                {"Equipo / Punto": "3. Salida Turbina a Condensador", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_cond_in:.1f}", "h [kJ/kg]": f"{h_cond_in/1e3:.2f}", "s [kJ/kg·K]": f"{s_cond_in/1e3:.4f}"},
+                {"Equipo / Punto": "4. Salida Condensador (Líq. Sat.)", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_cond_out:.1f}", "h [kJ/kg]": f"{h_cond_out/1e3:.2f}", "s [kJ/kg·K]": f"{s_cond_out/1e3:.4f}"},
+                {"Equipo / Punto": "5. Salida Calentador Proceso (Líq. Sat.)", "P [kPa]": f"{P_proc:.1f}", "T [°C]": f"{T_sat_proc:.1f}", "h [kJ/kg]": f"{hf_proc/1e3:.2f}", "s [kJ/kg·K]": f"{sf_proc/1e3:.4f}"}
+            ]
+            st.dataframe(filas_cogen, use_container_width=True, hide_index=True)
+        else:
+            filas = [
+                {"Estado": "Salida Condensador (1)", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_cond_out:.1f}", "h [kJ/kg]": f"{h_cond_out/1e3:.2f}", "s [kJ/kg·K]": f"{s_cond_out/1e3:.4f}"},
+                {"Estado": "Salida Bomba Principal (2)", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T2:.1f}", "h [kJ/kg]": f"{h2/1e3:.2f}", "s [kJ/kg·K]": f"{s2/1e3:.4f}"},
+                {"Estado": "Entrada Turbina AP", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T_max:.1f}", "h [kJ/kg]": f"{h_in_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_in_turb/1e3:.4f}"},
+                {"Estado": "Escape Turbina / Condensador", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_out_turb:.1f}", "h [kJ/kg]": f"{h_out_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_out_turb/1e3:.4f}"}
+            ]
+            st.dataframe(filas, use_container_width=True, hide_index=True)
 
     with tab_procedimiento:
-        st.markdown("#### Memoria de Cálculo Analítica (Paso a Paso)")
-        
+        st.markdown("#### Memoria de Cálculo Analítica Paso a Paso")
         col_btn, _ = st.columns([1.5, 2])
         with col_btn:
             if st.button("⚡ Generar / Actualizar Memoria de Cálculo", type="primary", use_container_width=True):
-                st.session_state["solucion_texto"] = generar_memoria_analitica_nativa()
+                st.session_state["solucion_texto"] = generar_memoria_analitica_completa()
                 st.rerun()
 
         if st.session_state["solucion_texto"]:
@@ -649,7 +746,7 @@ try:
             st.markdown(st.session_state["solucion_texto"])
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.info("Presiona el botón **'⚡ Generar / Actualizar Memoria de Cálculo'** para desplegar la solución analítica completa del ciclo.")
+            st.info("Presiona el botón **'⚡ Generar / Actualizar Memoria de Cálculo'** para desplegar el balance de masa, energía y factor de utilización.")
 
 except Exception as err:
     st.error(f"Error procesando propiedades en CoolProp: {err}")
