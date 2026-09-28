@@ -284,7 +284,6 @@ try:
     def generar_memoria_analitica_nativa():
         fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
         
-        # Calcular entalpías de extracción y propiedades de saturación
         extracciones_info = []
         for idx, f in enumerate(fwh_ord):
             p_kpa = f['presion']
@@ -307,7 +306,6 @@ try:
                 "s_ext": s_ref / 1e3
             })
 
-        # Estimación rigurosa de fracciones de masa y_i
         y_valores = []
         if len(extracciones_info) > 0:
             h_anterior = h1 / 1e3
@@ -321,7 +319,6 @@ try:
         
         y_condensador = max(0.40, 1.0 - sum(y_valores))
 
-        # Trabajo y calor ajustados con las fracciones de masa
         if len(y_valores) == 3:
             y1, y2, y3 = y_valores[0], y_valores[1], y_valores[2]
             w_turb_real = (h_in_turb/1e3 - extracciones_info[0]["h_ext"]) + \
@@ -343,19 +340,16 @@ try:
         w_rev_real = q_in_real * (1.0 - (T0 / TH))
         eta_II_real = (w_neto_real / w_rev_real) * 100.0 if w_rev_real > 0 else 0.0
 
-        x_dest_caldera = q_in_real - (h_in_turb/1e3 - hf_superior) * (T0 / TH)
-        x_dest_cond = y_condensador * (h_out_turb/1e3 - h1/1e3) * (T0 / (T1 + 273.15))
         x_dest_total = q_in_real - w_neto_real
 
-        # Redacción de la memoria técnica
         doc = f"""### 1. Parámetros de Diseño y Fronteras del Sistema
 * **Presión de Caldera:** {P_cald:.1f} kPa ({P_cald/1000:.2f} MPa)
-* **Temperatura de Vapor Vivo ($T_{{max}}$):** {T_max:.1f} °C ({T_max+273.15:.2f} K)
+* **Temperatura de Entrada Turbina ($T_{{max}}$):** {T_max:.1f} °C ({T_max+273.15:.2f} K)
 * **Presión de Condensación:** {P_cond:.1f} kPa
 * **Recalentamiento Intermedio:** {"Sí, a " + str(P_recal) + " kPa y " + str(T_recal) + " °C" if tiene_recal else "No"}
 * **Calentadores de Agua de Alimentación (FWH):** {num_fwh} configurados
-* **Rendimientos Isentrópicos:** Turbina $\eta_t = {eta_t*100:.1f}\%$, Bombas $\eta_p = {eta_p*100:.1f}\%$
-* **Entorno Térmico:** Fuente $T_H = {TH:.1f}\text{ K}$, Ambiente $T_0 = {T0:.1f}\text{ K}$
+* **Rendimientos Isentrópicos:** Turbina $\eta_t = {eta_t*100:.1f}\\%$, Bombas $\eta_p = {eta_p*100:.1f}\\%$
+* **Entorno Térmico:** Fuente $T_H = {TH:.1f}$ K, Ambiente $T_0 = {T0:.1f}$ K
 
 ---
 
@@ -377,10 +371,10 @@ try:
             doc += """\n---\n\n### 3. Balance de Masa y Energía en los Calentadores (FWH)\n"""
             doc += "Aplicando la Primera Ley de la Termodinámica en cada calentador en régimen estacionario:\n\n"
             for ext, y_val in zip(extracciones_info, y_valores):
-                doc += f"* **{ext['nombre']} ({ext['tipo']}):** $P = {ext['P_kPa']:.0f}\text{{ kPa}}$, $T_{{sat}} = {ext['T_sat']:.1f}\ ^\circ\text{{C}}$\n"
-                doc += f"  * Entalpía de vapor extraído: $h_{{ext}} = {ext['h_ext']:.2f}\text{{ kJ/kg}}$\n"
-                doc += f"  * Entalpía de líquido saturado: $h_f = {ext['hf_sat']:.2f}\text{{ kJ/kg}}$\n"
-                doc += f"  * **Fracción de masa extraída ($y_{{{ext['idx']}}}$):** **{y_val:.4f}** ({(y_val*100):.2f}% del flujo total)\n\n"
+                doc += f"* **{ext['nombre']} ({ext['tipo']}):** $P = {ext['P_kPa']:.0f}$ kPa, $T_{{sat}} = {ext['T_sat']:.1f}$ °C\n"
+                doc += f"  * Entalpía de vapor extraído: $h_{{ext}} = {ext['h_ext']:.2f}$ kJ/kg\n"
+                doc += f"  * Entalpía de líquido saturado: $h_f = {ext['hf_sat']:.2f}$ kJ/kg\n"
+                doc += f"  * **Fracción de masa extraída ($y_{ext['idx']}$):** **{y_val:.4f}** ({(y_val*100):.2f}% del flujo total)\n\n"
             doc += f"* **Fracción que alcanza el Condensador ($1 - \sum y_i$):** **{y_condensador:.4f}** ({(y_condensador*100):.2f}%)\n"
 
         doc += f"""\n---\n\n### 4. Balance de Energía y Desempeño Térmico (1ra Ley)
@@ -399,11 +393,11 @@ try:
 """
         return doc
 
-    # Botón en la barra lateral
     st.sidebar.markdown("---")
     if st.sidebar.button("⚡ Calcular Procedimiento Paso a Paso", type="primary", use_container_width=True):
         st.session_state["solucion_texto"] = generar_memoria_analitica_nativa()
         st.sidebar.success("¡Memoria de cálculo generada!")
+        st.rerun()
 
     # ==========================================
     # PESTAÑAS PRINCIPALES
@@ -648,6 +642,7 @@ try:
         with col_btn:
             if st.button("⚡ Generar / Actualizar Memoria de Cálculo", type="primary", use_container_width=True):
                 st.session_state["solucion_texto"] = generar_memoria_analitica_nativa()
+                st.rerun()
 
         if st.session_state["solucion_texto"]:
             st.markdown('<div class="incisos-box">', unsafe_allow_html=True)
