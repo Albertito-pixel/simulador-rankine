@@ -489,7 +489,7 @@ with tab_ts:
             height=580,
             annotations=flechas_anotaciones
         )
-        st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
     with tab_estados:
         st.markdown("#### Tabla de Estados Termodinámicos")
