@@ -65,7 +65,7 @@ st.markdown("""
 st.markdown("""
 <div class="hero-box">
     <div class="hero-title">⚡ TermoRankine Pro</div>
-    <div class="hero-sub">Simulador de ciclos Rankine con diagramas T-s estilo textbook y resolución analítica por IA.</div>
+    <div class="hero-sub">Simulador de ciclos Rankine con diagramas T-s interactivos y resolución analítica por IA.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -203,6 +203,12 @@ with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
     TH = st.number_input("Temp. Fuente (T_H) [K]", value=float(st.session_state["TH"]))
     T0 = st.number_input("Temp. Ambiente (T_0) [K]", value=float(st.session_state["T0"]))
 
+# Selector de colores integrado en la barra lateral
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎨 Apariencia del Gráfico")
+color_ciclo = st.sidebar.color_picker("Color de la Línea del Ciclo", value="#ff6b35")
+color_campana = st.sidebar.color_picker("Color de la Campana", value="#47505e")
+
 def resolver_manual_con_ia():
     desc_fwh = "\n".join([f"- Calentador #{i+1}: {c['tipo']} a {c['presion']} kPa" for i, c in enumerate(fwh_configuracion)])
     prompt_manual = f"""
@@ -265,13 +271,11 @@ def get_T_safe(P_val, H_val):
         return CP.PropsSI('T', 'P', P_val, 'Q', 0, fluido) - 273.15
 
 try:
-    # Estado 1: Salida del condensador
     h1 = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
     s1 = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
     v1 = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
     T1 = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
 
-    # Vapor vivo a la entrada de la turbina
     h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
     s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
 
@@ -320,13 +324,7 @@ try:
         "📝 Procedimiento / Incisos"
     ])
 
-with tab_ts:
-        # ========================================================
-        # 🎨 DEFINE AQUÍ EL COLOR DE LA LÍNEA DEL CICLO:
-        # ========================================================
-        COLOR_CICLO = "#00d2ff"     # Ejemplo: #00d2ff (Cyan), #00ff88 (Verde), #ffd000 (Amarillo), #a855f7 (Púrpura)
-        COLOR_CAMPANA = "#47505e"   # Gris sutil de fondo
-
+    with tab_ts:
         str_pcald = f"{P_cald/1000:.1f} MPa" if P_cald >= 1000 else f"{P_cald:.0f} kPa"
         str_pcond = f"{P_cond/1000:.2f} MPa" if P_cond >= 1000 else f"{P_cond:.0f} kPa"
 
@@ -342,7 +340,7 @@ with tab_ts:
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
             mode='lines',
-            line=dict(color=COLOR_CAMPANA, width=1.4),
+            line=dict(color=color_campana, width=1.4),
             name='Campana',
             hoverinfo='skip'
         ))
@@ -380,8 +378,8 @@ with tab_ts:
             x_ciclo = [pt1[0], pt2[0]] + s_liq_23 + [pt3[0], pt4[0]] + s_liq_4c + [s_f_cald, s_g_cald] + list(s_sup) + [pt6[0], pt7[0], pt1[0]]
             y_ciclo = [pt1[1], pt2[1]] + list(T_liq_23) + [pt3[1], pt4[1]] + list(T_liq_4c) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt6[1], pt7[1], pt1[1]]
 
-            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=COLOR_CICLO, width=2.4), name='Ciclo', hoverinfo='skip'))
-            fig.add_trace(go.Scatter(x=[pt6[0], s_g_fwh, pt3[0]], y=[pt6[1], T_sat_fwh, pt3[1]], mode='lines', line=dict(color=COLOR_CICLO, width=2.0), name='Extracción', hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=color_ciclo, width=2.4), name='Ciclo', hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=[pt6[0], s_g_fwh, pt3[0]], y=[pt6[1], T_sat_fwh, pt3[1]], mode='lines', line=dict(color=color_ciclo, width=2.0), name='Extracción', hoverinfo='skip'))
 
             pts_x = [pt1[0], pt2[0], pt3[0], pt4[0], pt5[0], pt6[0], pt7[0]]
             pts_y = [pt1[1], pt2[1], pt3[1], pt4[1], pt5[1], pt6[1], pt7[1]]
@@ -397,8 +395,8 @@ with tab_ts:
                 dict(x=(pt1[0] + pt7[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=pt5[0] + 0.18, y=(pt5[1] + pt6[1])/2, text="1 ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
                 dict(x=pt6[0] + 0.32, y=(pt6[1] + pt7[1])/2, text="(1-y) ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=COLOR_CICLO, size=10)),
-                dict(x=(pt2[0] + pt3[0])/2, y=(pt2[1] + pt3[1])/2 + 4, text="▶", showarrow=False, font=dict(color=COLOR_CICLO, size=9))
+                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=color_ciclo, size=10)),
+                dict(x=(pt2[0] + pt3[0])/2, y=(pt2[1] + pt3[1])/2 + 4, text="▶", showarrow=False, font=dict(color=color_ciclo, size=9))
             ]
 
         elif num_fwh == 0 and not tiene_recal:
@@ -413,7 +411,7 @@ with tab_ts:
             x_ciclo = [pt1[0], pt2[0]] + s_liq + [s_f_cald, s_g_cald] + list(s_sup) + [pt4[0], pt1[0]]
             y_ciclo = [pt1[1], pt2[1]] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt4[1], pt1[1]]
 
-            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=COLOR_CICLO, width=2.4), name='Ciclo', hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=color_ciclo, width=2.4), name='Ciclo', hoverinfo='skip'))
 
             pts_x = [pt1[0], pt2[0], pt3[0], pt4[0]]
             pts_y = [pt1[1], pt2[1], pt3[1], pt4[1]]
@@ -426,7 +424,7 @@ with tab_ts:
                 dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=(pt1[0] + pt4[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=pt3[0] + 0.18, y=(pt3[1] + pt4[1])/2, text="1 ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=COLOR_CICLO, size=10))
+                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=color_ciclo, size=10))
             ]
 
         else:
@@ -449,7 +447,7 @@ with tab_ts:
             x_ciclo = [pt1[0], pt2[0]] + s_liq + [s_f_cald, s_g_cald] + list(s_sup) + [pt_rec_sal[0]] + s_rec_c + [pt_rec_in[0], pt_out[0], pt1[0]]
             y_ciclo = [pt1[1], pt2[1]] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt_rec_sal[1]] + [t-273.15 for t in T_rec_c] + [pt_rec_in[1], pt_out[1], pt1[1]]
 
-            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=COLOR_CICLO, width=2.4), name='Ciclo', hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=color_ciclo, width=2.4), name='Ciclo', hoverinfo='skip'))
 
             pts_x = [pt1[0], pt2[0], pt_in[0], pt_rec_sal[0], pt_rec_in[0], pt_out[0]]
             pts_y = [pt1[1], pt2[1], pt_in[1], pt_rec_sal[1], pt_rec_in[1], pt_out[1]]
@@ -489,7 +487,7 @@ with tab_ts:
             height=580,
             annotations=flechas_anotaciones
         )
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
     with tab_estados:
         st.markdown("#### Tabla de Estados Termodinámicos")
