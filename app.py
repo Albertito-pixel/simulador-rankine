@@ -12,7 +12,7 @@ from google.genai import types
 # CONFIGURACIÓN GENERAL Y ESTILO INDUSTRIAL
 # ==========================================
 st.set_page_config(
-    page_title="TermoRankine Pro | Simulador & Solucionador",
+    page_title="Termo Rankine | Simulador & Solucionador",
     page_icon="⚡",
     layout="wide"
 )
