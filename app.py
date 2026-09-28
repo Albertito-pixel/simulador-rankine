@@ -65,7 +65,7 @@ st.markdown("""
 st.markdown("""
 <div class="hero-box">
     <div class="hero-title">⚡ TermoRankine Pro</div>
-    <div class="hero-sub">Simulador de ciclos Rankine con diagramas T-s interactivos y resolución analítica por IA.</div>
+    <div class="hero-sub">Simulador térmico de ciclos de potencia, diagramas T-s interactivos y memoria de cálculo analítica.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -101,18 +101,18 @@ st.sidebar.markdown("### ⚡ Parámetros del Ciclo")
 
 metodo = st.sidebar.radio(
     "Modo de ingreso:",
-    ["✍️ Manual", "📷 Captura del problema"],
+    ["✍️ Manual", "📷 Cargar Imagen / Enunciado"],
     horizontal=True
 )
 
-if metodo == "📷 Captura con IA":
-    archivo = st.sidebar.file_uploader("Subir problema / diagrama", type=["png", "jpg", "jpeg", "webp"])
+if metodo == "📷 Cargar Imagen / Enunciado":
+    archivo = st.sidebar.file_uploader("Subir diagrama o enunciado del problema", type=["png", "jpg", "jpeg", "webp"])
     if archivo:
         img = Image.open(archivo)
-        if st.sidebar.button("🔍 Analizar y Cargar", type="primary", use_container_width=True):
-            with st.spinner("Procesando imagen con IA..."):
+        if st.sidebar.button("🔍 Extraer Datos y Procesar", type="primary", use_container_width=True):
+            with st.spinner("Extrayendo parámetros termodinámicos..."):
                 prompt = """
-                Eres un profesor titular de Termodinámica de ingeniería. Analiza la imagen.
+                Eres un profesor titular de Termodinámica de ingeniería técnica. Analiza el problema.
                 Devuelve ÚNICAMENTE un JSON con:
                 {
                   "P_cald_kPa": float,
@@ -129,7 +129,7 @@ if metodo == "📷 Captura con IA":
                   "eta_p": float,
                   "TH_K": float,
                   "T0_K": float,
-                  "respuestas_directas": "Markdown con la resolución y resultados de los incisos a), b), etc."
+                  "respuestas_directas": "Markdown con la memoria de cálculo analítica detallada y resultados de los incisos a), b), etc."
                 }
                 Reglas: presiones en kPa (ej: 15 MPa = 15000, 1.2 MPa = 1200, 75 kPa = 75).
                 """
@@ -166,7 +166,7 @@ if metodo == "📷 Captura con IA":
                     st.session_state["TH"] = float(datos.get("TH_K", 800.0))
                     st.session_state["T0"] = float(datos.get("T0_K", 300.0))
                     st.session_state["solucion_texto"] = datos.get("respuestas_directas", "")
-                    st.sidebar.success("¡Datos cargados!")
+                    st.sidebar.success("¡Parámetros cargados con éxito!")
                     st.rerun()
 
 st.sidebar.markdown("---")
@@ -203,17 +203,16 @@ with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
     TH = st.number_input("Temp. Fuente (T_H) [K]", value=float(st.session_state["TH"]))
     T0 = st.number_input("Temp. Ambiente (T_0) [K]", value=float(st.session_state["T0"]))
 
-# Selector de colores integrado en la barra lateral
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎨 Apariencia del Gráfico")
 color_ciclo = st.sidebar.color_picker("Color de la Línea del Ciclo", value="#ff6b35")
 color_campana = st.sidebar.color_picker("Color de la Campana", value="#47505e")
 
-def resolver_manual_con_ia():
+def resolver_manual_analitico():
     desc_fwh = "\n".join([f"- Calentador #{i+1}: {c['tipo']} a {c['presion']} kPa" for i, c in enumerate(fwh_configuracion)])
     prompt_manual = f"""
-    Eres un profesor de Termodinámica experto en ciclos Rankine del libro de Çengel.
-    El estudiante configuró estos parámetros del ciclo:
+    Eres un profesor titular de Termodinámica de ingeniería técnica.
+    Se configuraron estos parámetros exactos del ciclo:
     - Presión Caldera: {P_cald} kPa ({(P_cald/1000):.2f} MPa)
     - Temperatura Vapor Vivo: {T_max} °C
     - Presión Condensador: {P_cond} kPa
@@ -224,13 +223,13 @@ def resolver_manual_con_ia():
     - Entorno: T_fuente = {TH} K, T_ambiente = {T0} K
 
     TAREA:
-    Resuelve el problema paso a paso:
-    1. Propiedades de cada estado (entalpías en kJ/kg y entropías en kJ/kg·K).
-    2. Fracciones extraídas (y, z) con los balances de masa y energía.
-    3. Trabajo neto (W_neto) y calor suministrado (Qin).
+    Elabora una memoria de cálculo analítica rigurosa:
+    1. Propiedades termodinámicas en cada estado (entalpías en kJ/kg y entropías en kJ/kg·K).
+    2. Fracciones de extracción (y1, y2, y3...) aplicando balances de masa y energía en cada calentador.
+    3. Trabajo específico neto (W_neto) y calor suministrado (Qin).
     4. Eficiencia térmica de la Primera Ley (η_th).
-    5. Análisis de Segunda Ley: destrucción de exergía en cada componente (X_dest = T0 * S_gen) y eficiencia exergética (η_II).
-    Resalta los resultados numéricos finales en negrita.
+    5. Análisis de Segunda Ley: destrucción de exergía en cada equipo (X_dest = T0 * S_gen) y eficiencia exergética (η_II).
+    Presenta fórmulas claras y resalta los resultados numéricos finales en negrita.
     """
     for intento in range(3):
         try:
@@ -244,10 +243,10 @@ def resolver_manual_con_ia():
             time.sleep(2)
 
 st.sidebar.markdown("---")
-if st.sidebar.button("⚡ Resolver Ciclo", type="primary", use_container_width=True):
-    with st.spinner("Calculando balances y Segunda Ley..."):
-        resolver_manual_con_ia()
-        st.sidebar.success("¡Solución analítica generada!")
+if st.sidebar.button("⚡ Calcular Procedimiento Paso a Paso", type="primary", use_container_width=True):
+    with st.spinner("Calculando balances de masa, energía y 2da Ley..."):
+        resolver_manual_analitico()
+        st.sidebar.success("¡Memoria de cálculo generada!")
         st.rerun()
 
 # ==========================================
@@ -335,7 +334,6 @@ try:
 
         fig = go.Figure()
 
-        # 1. Trazo de la campana
         fig.add_trace(go.Scatter(
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
@@ -351,115 +349,167 @@ try:
         T_sup = np.linspace(T_sat_cald + 0.1, T_max, 35)
         s_sup = [CP.PropsSI('S', 'P', P_cald_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
 
-        flechas_anotaciones = []
+        flechas_anotaciones = [
+            dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
+            dict(x=(s1/1e3 + s_out_turb/1e3)/2, y=T1 + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
+        ]
 
-        if num_fwh == 1 and not tiene_recal:
-            p_fwh_Pa = fwh_configuracion[0]['presion'] * 1e3
-            str_pfwh = f"{fwh_configuracion[0]['presion']/1000:.1f} MPa" if fwh_configuracion[0]['presion'] >= 1000 else f"{fwh_configuracion[0]['presion']:.0f} kPa"
-            T_sat_fwh = CP.PropsSI('T', 'P', p_fwh_Pa, 'Q', 0, fluido) - 273.15
-            s_f_fwh = CP.PropsSI('S', 'P', p_fwh_Pa, 'Q', 0, fluido) / 1e3
-            s_g_fwh = CP.PropsSI('S', 'P', p_fwh_Pa, 'Q', 1, fluido) / 1e3
+        fwh_ordenados = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
 
-            pt1 = (s1/1e3, T1)
-            pt2 = (s1/1e3, T1 + 28.0)
-            pt3 = (s_f_fwh, T_sat_fwh)
-            pt4 = (s_f_fwh, T_sat_fwh + 18.0)
-            pt5 = (s_in_turb/1e3, T_max)
-            h_6_iso = CP.PropsSI('H', 'P', p_fwh_Pa, 'S', s_in_turb, fluido)
-            t_6 = get_T_safe(p_fwh_Pa, h_6_iso)
-            pt6 = (s_in_turb/1e3, t_6)
-            pt7 = (s_out_turb/1e3, T_out_turb)
+        pts_marcadores_x = []
+        pts_marcadores_y = []
+        pts_marcadores_txt = []
+        pts_marcadores_pos = []
 
-            T_liq_23 = np.linspace(pt2[1], pt3[1], 20)
-            s_liq_23 = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq_23]
-            T_liq_4c = np.linspace(pt4[1], T_sat_cald, 25)
-            s_liq_4c = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq_4c]
+        contador_estado = 1
 
-            x_ciclo = [pt1[0], pt2[0]] + s_liq_23 + [pt3[0], pt4[0]] + s_liq_4c + [s_f_cald, s_g_cald] + list(s_sup) + [pt6[0], pt7[0], pt1[0]]
-            y_ciclo = [pt1[1], pt2[1]] + list(T_liq_23) + [pt3[1], pt4[1]] + list(T_liq_4c) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt6[1], pt7[1], pt1[1]]
+        pt1 = (s1/1e3, T1)
+        pts_marcadores_x.append(pt1[0])
+        pts_marcadores_y.append(pt1[1])
+        pts_marcadores_txt.append(str(contador_estado))
+        pts_marcadores_pos.append("bottom left")
+        contador_estado += 1
 
-            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=color_ciclo, width=2.4), name='Ciclo', hoverinfo='skip'))
-            fig.add_trace(go.Scatter(x=[pt6[0], s_g_fwh, pt3[0]], y=[pt6[1], T_sat_fwh, pt3[1]], mode='lines', line=dict(color=color_ciclo, width=2.0), name='Extracción', hoverinfo='skip'))
+        pt2 = (s1/1e3, T1 + 25.0)
+        pts_marcadores_x.append(pt2[0])
+        pts_marcadores_y.append(pt2[1])
+        pts_marcadores_txt.append(str(contador_estado))
+        pts_marcadores_pos.append("top left")
+        contador_estado += 1
 
-            pts_x = [pt1[0], pt2[0], pt3[0], pt4[0], pt5[0], pt6[0], pt7[0]]
-            pts_y = [pt1[1], pt2[1], pt3[1], pt4[1], pt5[1], pt6[1], pt7[1]]
-            pts_txt = ["1", "2", "3", "4", "5", "6", "7"]
-            pts_pos = ["bottom left", "top left", "bottom left", "top left", "middle right", "middle right", "middle right"]
+        pts_liquido = [pt1, pt2]
+        fwh_inversos = list(reversed(fwh_ordenados))
 
-            fig.add_trace(go.Scatter(x=pts_x, y=pts_y, mode='markers+text', marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)), text=pts_txt, textposition=pts_pos, textfont=dict(color='white', size=12, family="Inter", weight='bold'), name='Estados', hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"))
+        for idx, fwh in enumerate(fwh_inversos):
+            p_pa = fwh['presion'] * 1e3
+            t_sat_f = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
+            s_sat_f = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
 
-            flechas_anotaciones = [
-                dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
-                dict(x=(pt3[0] + pt6[0])/2, y=T_sat_fwh + 10, text=f"<b>{str_pfwh}</b>", showarrow=False, font=dict(color='white', size=11)),
-                dict(x=(pt3[0] + pt6[0])/2 + 1.2, y=T_sat_fwh + 10, text="y ◀", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=(pt1[0] + pt7[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}</b>", showarrow=False, font=dict(color='white', size=11)),
-                dict(x=pt5[0] + 0.18, y=(pt5[1] + pt6[1])/2, text="1 ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=pt6[0] + 0.32, y=(pt6[1] + pt7[1])/2, text="(1-y) ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=color_ciclo, size=10)),
-                dict(x=(pt2[0] + pt3[0])/2, y=(pt2[1] + pt3[1])/2 + 4, text="▶", showarrow=False, font=dict(color=color_ciclo, size=9))
-            ]
+            t_tramo = np.linspace(pts_liquido[-1][1], t_sat_f, 15)
+            s_tramo = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_tramo]
+            for sx, ty in zip(s_tramo, t_tramo):
+                pts_liquido.append((sx, ty))
 
-        elif num_fwh == 0 and not tiene_recal:
-            pt1 = (s1/1e3, T1)
-            pt2 = (s1/1e3, T1 + 30.0)
-            pt3 = (s_in_turb/1e3, T_max)
-            pt4 = (s_out_turb/1e3, T_out_turb)
+            pt_fwh_liq = (s_sat_f, t_sat_f)
+            pts_liquido.append(pt_fwh_liq)
+            pts_marcadores_x.append(pt_fwh_liq[0])
+            pts_marcadores_y.append(pt_fwh_liq[1])
+            pts_marcadores_txt.append(str(contador_estado))
+            pts_marcadores_pos.append("bottom left")
+            contador_estado += 1
 
-            T_liq = np.linspace(pt2[1], T_sat_cald, 25)
-            s_liq = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq]
+            pt_bomba_fwh = (s_sat_f, t_sat_f + 16.0)
+            pts_liquido.append(pt_bomba_fwh)
+            pts_marcadores_x.append(pt_bomba_fwh[0])
+            pts_marcadores_y.append(pt_bomba_fwh[1])
+            pts_marcadores_txt.append(str(contador_estado))
+            pts_marcadores_pos.append("top left")
+            contador_estado += 1
 
-            x_ciclo = [pt1[0], pt2[0]] + s_liq + [s_f_cald, s_g_cald] + list(s_sup) + [pt4[0], pt1[0]]
-            y_ciclo = [pt1[1], pt2[1]] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt4[1], pt1[1]]
+        t_tramo_cald = np.linspace(pts_liquido[-1][1], T_sat_cald, 20)
+        s_tramo_cald = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_tramo_cald]
+        for sx, ty in zip(s_tramo_cald, t_tramo_cald):
+            pts_liquido.append((sx, ty))
 
-            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=color_ciclo, width=2.4), name='Ciclo', hoverinfo='skip'))
+        pts_caldera = [(s_f_cald, T_sat_cald), (s_g_cald, T_sat_cald)] + list(zip(s_sup, T_sup))
 
-            pts_x = [pt1[0], pt2[0], pt3[0], pt4[0]]
-            pts_y = [pt1[1], pt2[1], pt3[1], pt4[1]]
-            pts_txt = ["1", "2", "3", "4"]
-            pts_pos = ["bottom left", "top left", "middle right", "middle right"]
+        pt_in_turb = (s_in_turb/1e3, T_max)
+        pts_marcadores_x.append(pt_in_turb[0])
+        pts_marcadores_y.append(pt_in_turb[1])
+        pts_marcadores_txt.append(str(contador_estado))
+        pts_marcadores_pos.append("middle right")
+        contador_estado += 1
 
-            fig.add_trace(go.Scatter(x=pts_x, y=pts_y, mode='markers+text', marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)), text=pts_txt, textposition=pts_pos, textfont=dict(color='white', size=12, family="Inter", weight='bold'), name='Estados', hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"))
+        x_ciclo = [p[0] for p in pts_liquido] + [p[0] for p in pts_caldera]
+        y_ciclo = [p[1] for p in pts_liquido] + [p[1] for p in pts_caldera]
 
-            flechas_anotaciones = [
-                dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
-                dict(x=(pt1[0] + pt4[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11)),
-                dict(x=pt3[0] + 0.18, y=(pt3[1] + pt4[1])/2, text="1 ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=color_ciclo, size=10))
-            ]
+        if tiene_recal:
+            h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
+            t_rec_sal_val = get_T_safe(P_recal_Pa, h_rec_iso)
+            pt_sal_ap = (s_in_turb/1e3, t_rec_sal_val)
+            
+            x_ciclo.append(pt_sal_ap[0])
+            y_ciclo.append(pt_sal_ap[1])
+            pts_marcadores_x.append(pt_sal_ap[0])
+            pts_marcadores_y.append(pt_sal_ap[1])
+            pts_marcadores_txt.append(str(contador_estado))
+            pts_marcadores_pos.append("middle right")
+            contador_estado += 1
 
-        else:
-            p_fwh_abierto = min(f['presion'] for f in fwh_configuracion) * 1e3 if num_fwh > 0 else P_cond_Pa
-            h_10_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-            t_10 = get_T_safe(P_recal_Pa, h_10_iso)
-            T_rec_c = np.linspace(t_10 + 273.15, T_recal_K, 15)
+            T_rec_c = np.linspace(t_rec_sal_val + 273.15, T_recal_K, 15)
             s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t, fluido)/1e3 for t in T_rec_c]
+            for sx, ty in zip(s_rec_c, [t-273.15 for t in T_rec_c]):
+                x_ciclo.append(sx)
+                y_ciclo.append(ty)
 
-            pt1 = (s1/1e3, T1)
-            pt2 = (s1/1e3, T1 + 28.0)
-            pt_in = (s_in_turb/1e3, T_max)
-            pt_rec_sal = (s_in_turb/1e3, t_10)
-            pt_rec_in = (s_rec_in2/1e3, T_recal)
-            pt_out = (s_out_turb/1e3, T_out_turb)
+            pt_in_bp = (s_rec_in2/1e3, T_recal)
+            pts_marcadores_x.append(pt_in_bp[0])
+            pts_marcadores_y.append(pt_in_bp[1])
+            pts_marcadores_txt.append(str(contador_estado))
+            pts_marcadores_pos.append("middle right")
+            contador_estado += 1
 
-            T_liq = np.linspace(pt2[1], T_sat_cald, 25)
-            s_liq = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq]
+            s_turb_bp = s_rec_in2/1e3
+        else:
+            s_turb_bp = s_in_turb/1e3
 
-            x_ciclo = [pt1[0], pt2[0]] + s_liq + [s_f_cald, s_g_cald] + list(s_sup) + [pt_rec_sal[0]] + s_rec_c + [pt_rec_in[0], pt_out[0], pt1[0]]
-            y_ciclo = [pt1[1], pt2[1]] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt_rec_sal[1]] + [t-273.15 for t in T_rec_c] + [pt_rec_in[1], pt_out[1], pt1[1]]
+        for idx, fwh in enumerate(fwh_ordenados):
+            p_pa = fwh['presion'] * 1e3
+            str_pf = f"{fwh['presion']/1000:.1f} MPa" if fwh['presion'] >= 1000 else f"{fwh['presion']:.0f} kPa"
+            
+            h_ext_iso = CP.PropsSI('H', 'P', p_pa, 'S', s_turb_bp * 1e3, fluido)
+            t_ext = get_T_safe(p_pa, h_ext_iso)
+            pt_ext = (s_turb_bp, t_ext)
 
-            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=color_ciclo, width=2.4), name='Ciclo', hoverinfo='skip'))
+            t_sat_f = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
+            s_sat_f = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
 
-            pts_x = [pt1[0], pt2[0], pt_in[0], pt_rec_sal[0], pt_rec_in[0], pt_out[0]]
-            pts_y = [pt1[1], pt2[1], pt_in[1], pt_rec_sal[1], pt_rec_in[1], pt_out[1]]
-            pts_txt = ["1", "2", "3", "4", "5", "6"]
-            pts_pos = ["bottom left", "top left", "middle right", "middle right", "middle right", "middle right"]
+            fig.add_trace(go.Scatter(
+                x=[pt_ext[0], s_sat_f],
+                y=[pt_ext[1], t_sat_f],
+                mode='lines',
+                line=dict(color=color_ciclo, width=1.8, dash='dash' if num_fwh > 1 else 'solid'),
+                name=f'Extracción {str_pf}',
+                hoverinfo='skip'
+            ))
 
-            fig.add_trace(go.Scatter(x=pts_x, y=pts_y, mode='markers+text', marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)), text=pts_txt, textposition=pts_pos, textfont=dict(color='white', size=12, family="Inter", weight='bold'), name='Estados', hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"))
+            pts_marcadores_x.append(pt_ext[0])
+            pts_marcadores_y.append(pt_ext[1])
+            pts_marcadores_txt.append(str(contador_estado))
+            pts_marcadores_pos.append("middle right")
+            contador_estado += 1
 
-            flechas_anotaciones = [
-                dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
-                dict(x=(pt1[0] + pt_out[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
-            ]
+            flechas_anotaciones.append(
+                dict(x=(s_sat_f + pt_ext[0])/2, y=t_sat_f + 8, text=f"<b>{str_pf} ◀</b>", showarrow=False, font=dict(color='#cbd5e1', size=10))
+            )
+
+        pt_escape = (s_out_turb/1e3, T_out_turb)
+        x_ciclo.extend([pt_escape[0], pt1[0]])
+        y_ciclo.extend([pt_escape[1], pt1[1]])
+
+        pts_marcadores_x.append(pt_escape[0])
+        pts_marcadores_y.append(pt_escape[1])
+        pts_marcadores_txt.append(str(contador_estado))
+        pts_marcadores_pos.append("middle right")
+
+        fig.add_trace(go.Scatter(
+            x=x_ciclo, y=y_ciclo,
+            mode='lines',
+            line=dict(color=color_ciclo, width=2.4),
+            name='Ciclo Principal',
+            hoverinfo='skip'
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=pts_marcadores_x, y=pts_marcadores_y,
+            mode='markers+text',
+            marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
+            text=pts_marcadores_txt,
+            textposition=pts_marcadores_pos,
+            textfont=dict(color='white', size=11, family="Inter", weight='bold'),
+            name='Estados',
+            hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"
+        ))
 
         fig.update_layout(
             paper_bgcolor='#111317',
@@ -512,19 +562,19 @@ try:
             st.dataframe(t_fwh, use_container_width=True, hide_index=True)
 
     with tab_procedimiento:
-        st.markdown("#### Solución Analítica de los Incisos (Paso a Paso)")
+        st.markdown("#### Memoria de Cálculo Analítica (Paso a Paso)")
         
         col_btn, _ = st.columns([1.5, 2])
         with col_btn:
-            if st.button("⚡ Calcular / Actualizar Solución con IA", type="primary", use_container_width=True):
-                with st.spinner("Generando solución analítica completa con IA..."):
-                    resolver_manual_con_ia()
+            if st.button("⚡ Generar / Actualizar Memoria de Cálculo", type="primary", use_container_width=True):
+                with st.spinner("Calculando balances analíticos paso a paso..."):
+                    resolver_manual_analitico()
                     st.rerun()
 
         if st.session_state["solucion_texto"]:
             st.markdown(f'<div class="incisos-box">{st.session_state["solucion_texto"]}</div>', unsafe_allow_html=True)
         else:
-            st.info("Configura los parámetros en la barra lateral izquierda y presiona el botón **'⚡ Resolver Ciclo con IA'** para generar el procedimiento completo.")
+            st.info("Configura los parámetros en la barra lateral izquierda y presiona el botón **'⚡ Calcular Procedimiento Paso a Paso'** para generar la memoria de cálculo completa.")
 
 except Exception as err:
     st.error(f"Error procesando propiedades en CoolProp: {err}")
