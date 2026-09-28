@@ -244,7 +244,7 @@ def resolver_manual_con_ia():
             time.sleep(2)
 
 st.sidebar.markdown("---")
-if st.sidebar.button("⚡ Resolver Ciclo con IA", type="primary", use_container_width=True):
+if st.sidebar.button("⚡ Resolver Ciclo", type="primary", use_container_width=True):
     with st.spinner("Calculando balances y Segunda Ley con IA..."):
         resolver_manual_con_ia()
         st.sidebar.success("¡Solución analítica generada!")
