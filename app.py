@@ -101,7 +101,7 @@ st.sidebar.markdown("### ⚡ Parámetros del Ciclo")
 
 metodo = st.sidebar.radio(
     "Modo de ingreso:",
-    ["✍️ Manual", "📷 Captura con IA"],
+    ["✍️ Manual", "📷 Captura del problema"],
     horizontal=True
 )
 
