@@ -65,7 +65,7 @@ st.markdown("""
 st.markdown("""
 <div class="hero-box">
     <div class="hero-title">⚡ TermoRankine Pro</div>
-    <div class="hero-sub">Simulador interactivo con diagramas T-s avanzados, balances de energía y resolución analítica por IA.</div>
+    <div class="hero-sub">Simulador interactivo con diagramas T-s rigurosos, Primera y Segunda Ley, y resolución analítica por IA.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -76,17 +76,14 @@ client = genai.Client(api_key=API_KEY)
 # VARIABLES POR DEFECTO
 # ==========================================
 defaults = {
-    "P_cald": 16000.0,
-    "T_max": 600.0,
-    "P_cond": 10.0,
-    "tiene_recal": True,
-    "P_recal": 4000.0,
-    "T_recal": 600.0,
-    "num_fwh": 2,
-    "fwh_data": [
-        {"tipo": "Cerrado (CCA)", "presion": 4000.0},
-        {"tipo": "Abierto (CAA)", "presion": 500.0}
-    ],
+    "P_cald": 3000.0,
+    "T_max": 350.0,
+    "P_cond": 75.0,
+    "tiene_recal": False,
+    "P_recal": 1000.0,
+    "T_recal": 350.0,
+    "num_fwh": 0,
+    "fwh_data": [],
     "eta_t": 100.0,
     "eta_p": 100.0,
     "TH": 800.0,
@@ -173,9 +170,9 @@ if metodo == "📷 Captura con IA":
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Fronteras del Ciclo:**")
-P_cald = st.sidebar.number_input("Presión Caldera [kPa]", value=float(st.session_state["P_cald"]), step=500.0)
+P_cald = st.sidebar.number_input("Presión Caldera [kPa]", value=float(st.session_state["P_cald"]), step=250.0)
 T_max = st.sidebar.number_input("Vapor Vivo (T_max) [°C]", value=float(st.session_state["T_max"]), step=10.0)
-P_cond = st.sidebar.number_input("Presión Condensador [kPa]", value=float(st.session_state["P_cond"]), step=1.0)
+P_cond = st.sidebar.number_input("Presión Condensador [kPa]", value=float(st.session_state["P_cond"]), step=5.0)
 
 st.sidebar.markdown("---")
 tiene_recal = st.sidebar.checkbox("¿Tiene Recalentamiento?", value=st.session_state["tiene_recal"])
@@ -183,7 +180,7 @@ if tiene_recal:
     P_recal = st.sidebar.number_input("Presión Recalentador [kPa]", value=float(st.session_state["P_recal"]), step=200.0)
     T_recal = st.sidebar.number_input("Temp. Recalentamiento [°C]", value=float(st.session_state["T_recal"]), step=10.0)
 else:
-    P_recal, T_recal = 4000.0, 600.0
+    P_recal, T_recal = 1000.0, 350.0
 
 st.sidebar.markdown("---")
 num_fwh = st.sidebar.number_input("Número de Calentadores (FWH)", min_value=0, max_value=6, value=int(st.session_state["num_fwh"]))
@@ -208,26 +205,27 @@ with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
 def resolver_manual_con_ia():
     desc_fwh = "\n".join([f"- Calentador #{i+1}: {c['tipo']} a {c['presion']} kPa" for i, c in enumerate(fwh_configuracion)])
     prompt_manual = f"""
-    Eres un profesor de Termodinámica experto en ciclos Rankine.
-    Un estudiante ingresó estos parámetros exactos del ciclo:
+    Eres un profesor de Termodinámica experto en ciclos Rankine del libro de Çengel.
+    El estudiante configuró estos parámetros del ciclo:
     - Presión Caldera: {P_cald} kPa ({(P_cald/1000):.2f} MPa)
-    - Temperatura Vapor Vivo: {T_max} °C
+    - Temperatura Entrada Turbina: {T_max} °C
     - Presión Condensador: {P_cond} kPa
     - Recalentamiento: {"Sí, a " + str(P_recal) + " kPa y " + str(T_recal) + " °C" if tiene_recal else "No"}
-    - Calentadores de Agua de Alimentación (FWH): {num_fwh}
+    - Calentadores FWH: {num_fwh}
     {desc_fwh if num_fwh > 0 else "- Ninguno"}
     - Eficiencias Isentrópicas: Turbina {eta_t*100:.1f}%, Bomba {eta_p*100:.1f}%
     - Entorno: T_fuente = {TH} K, T_ambiente = {T0} K
 
     TAREA:
-    Resuelve el problema paso a paso de forma analítica y rigurosa:
-    1. Propiedades de los estados principales (entalpías y entropías).
-    2. Fracciones de vapor extraído (y, z, etc.) mediante balance de energía y masa en los calentadores abiertos/cerrados.
-    3. Trabajo neto específico (W_neto) y calor suministrado (Q_in).
-    4. Eficiencia térmica del ciclo (η_th).
-    5. Análisis de Segunda Ley: Exergía destruida (en componentes clave y total) y Eficiencia de la Segunda Ley (η_II).
-    
-    Escribe el procedimiento con fórmulas claras y resalta los resultados numéricos finales en negrita.
+    Resuelve detalladamente:
+    1. Propiedades en cada estado (h1, h2, h3, h4, etc. en kJ/kg y s en kJ/kg·K).
+    2. Si tiene calentadores, calcula las fracciones extraídas (y, z) con los balances de energía.
+    3. Trabajo de la bomba, trabajo de la turbina, trabajo neto y calor suministrado (Qin).
+    4. Eficiencia térmica de la Primera Ley (η_th).
+    5. Análisis de la Segunda Ley:
+       - Destrucción de exergía en cada uno de los 4 procesos (Bomba, Caldera, Turbina, Condensador) y la total (X_dest = T0 * S_gen).
+       - Eficiencia de la Segunda Ley (η_II = W_neto / W_rev).
+    Muestra los resultados finales en negrita.
     """
     for intento in range(3):
         try:
@@ -240,10 +238,9 @@ def resolver_manual_con_ia():
         except Exception:
             time.sleep(2)
 
-# Botón directo en la barra lateral para resolver a mano
 st.sidebar.markdown("---")
 if st.sidebar.button("⚡ Resolver Ciclo con IA", type="primary", use_container_width=True):
-    with st.spinner("Calculando balances, fracciones y eficiencias con IA..."):
+    with st.spinner("Calculando balances y Segunda Ley con IA..."):
         resolver_manual_con_ia()
         st.sidebar.success("¡Solución analítica generada!")
         st.rerun()
@@ -323,16 +320,17 @@ try:
     ])
 
     with tab_ts:
-        st.markdown(f"**Diagrama T-s — Rankine {'regenerativo con recalentamiento' if tiene_recal and num_fwh>0 else 'estándar'}**")
-        st.caption("Pasa el cursor sobre las líneas y puntos para inspeccionar la temperatura y entropía exacta de cada estado.")
+        st.markdown(f"**Diagrama T-s — Rankine {'regenerativo con recalentamiento' if tiene_recal and num_fwh>0 else 'ideal simple' if num_fwh==0 and not tiene_recal else 'con recalentamiento'}**")
+        st.caption("Pasa el cursor sobre los puntos para inspeccionar las propiedades exactas de cada estado.")
 
         T_crit = CP.PropsSI('Tcrit', fluido)
-        T_campana = np.linspace(273.16, T_crit - 0.2, 200)
+        T_campana = np.linspace(273.16, T_crit - 0.2, 220)
         s_liq = [CP.PropsSI('S', 'T', t, 'Q', 0, fluido)/1e3 for t in T_campana]
         s_vap = [CP.PropsSI('S', 'T', t, 'Q', 1, fluido)/1e3 for t in T_campana]
 
         fig = go.Figure()
 
+        # Campana de saturación
         fig.add_trace(go.Scatter(
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
@@ -342,6 +340,7 @@ try:
             hoverinfo='skip'
         ))
 
+        # Trazador de Isóbaras
         def add_isobara(P_pa, nombre):
             try:
                 T_sat = CP.PropsSI('T', 'P', P_pa, 'Q', 0, fluido) - 273.15
@@ -366,6 +365,9 @@ try:
             add_isobara(P_recal_Pa, f"{P_recal/1e3:.1f} MPa")
         add_isobara(P_cald_Pa, f"{P_cald/1e3:.1f} MPa")
 
+        # ====================================================
+        # TRAZADO DEL CICLO SEGÚN LA CONFIGURACIÓN
+        # ====================================================
         if tiene_recal and num_fwh >= 2:
             p_fwh_abierto = min(f['presion'] for f in fwh_configuracion) * 1e3
             h_10_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
@@ -426,19 +428,59 @@ try:
                 hovertemplate="<b>Estado %{text}</b><br>s: %{x:.3f} kJ/kg·K<br>T: %{y:.1f} °C<extra></extra>"
             ))
         else:
-            pts_x = [s1/1e3, s1/1e3, s_in_turb/1e3, s_out_turb/1e3, s1/1e3]
-            pts_y = [T1, T2, T_max, T_out_turb, T1]
+            # CICLO RANKINE SIMPLE O CON RECALENTAMIENTO (Rigoroso siguiendo la isóbara)
+            T_sat_cald = CP.PropsSI('T', 'P', P_cald_Pa, 'Q', 0, fluido) - 273.15
+            s_f_cald = CP.PropsSI('S', 'P', P_cald_Pa, 'Q', 0, fluido) / 1e3
+            s_g_cald = CP.PropsSI('S', 'P', P_cald_Pa, 'Q', 1, fluido) / 1e3
+
+            # Exageración visual del estado 2 (como en los libros de texto)
+            T2_vis = T1 + max(30.0, (T_sat_cald - T1) * 0.18)
+
+            # 1. Calentamiento líquido hasta saturación (sigue la campana de líquido)
+            T_liq = np.linspace(T2_vis, T_sat_cald, 25)
+            s_liq_line = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq]
+
+            # 2. Sobrecalentamiento hasta T_max a lo largo de P_cald
+            T_sup = np.linspace(T_sat_cald + 0.1, T_max, 25)
+            s_sup_line = [CP.PropsSI('S', 'P', P_cald_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
+
+            # Trayectoria completa del ciclo
+            x_ciclo = [s1/1e3, s1/1e3] + s_liq_line + [s_f_cald, s_g_cald] + s_sup_line + [s_out_turb/1e3, s1/1e3]
+            y_ciclo = [T1, T2_vis] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [T_out_turb, T1]
+
+            fig.add_trace(go.Scatter(
+                x=x_ciclo,
+                y=y_ciclo,
+                mode='lines',
+                line=dict(color='#f97316', width=2.4),
+                name='Ciclo Principal',
+                hoverinfo='skip'
+            ))
+
+            # Marcadores y textos en posiciones separadas para evitar colisiones
+            pts_x = [s1/1e3, s1/1e3, s_in_turb/1e3, s_out_turb/1e3]
+            pts_y = [T1, T2_vis, T_max, T_out_turb]
+            pts_txt = ["1", "2", "3", "4"]
+            pts_pos = ["bottom left", "top left", "top right", "bottom right"]
+            
+            pts_hover = [
+                f"<b>Estado 1 (Salida Condensador)</b><br>T: {T1:.2f} °C<br>s: {s1/1e3:.4f} kJ/kg·K<br>P: {P_cond:.1f} kPa",
+                f"<b>Estado 2 (Salida Bomba)</b><br>T real: {T2:.2f} °C (elevado en escala didáctica)<br>s: {s2/1e3:.4f} kJ/kg·K<br>P: {P_cald:.1f} kPa",
+                f"<b>Estado 3 (Entrada Turbina)</b><br>T: {T_max:.2f} °C<br>s: {s_in_turb/1e3:.4f} kJ/kg·K<br>P: {P_cald:.1f} kPa",
+                f"<b>Estado 4 (Salida Turbina)</b><br>T: {T_out_turb:.2f} °C<br>s: {s_out_turb/1e3:.4f} kJ/kg·K<br>P: {P_cond:.1f} kPa"
+            ]
+
             fig.add_trace(go.Scatter(
                 x=pts_x,
                 y=pts_y,
-                mode='lines+markers+text',
-                line=dict(color='#f97316', width=2.4),
-                marker=dict(color='#f9fafb', size=6),
-                text=["1", "2", "3", "4", "1"],
-                textposition="top right",
-                textfont=dict(color='#f9fafb', size=11),
-                name='Ciclo Rankine',
-                hovertemplate="s: %{x:.3f} kJ/kg·K<br>T: %{y:.1f} °C<extra></extra>"
+                mode='markers+text',
+                marker=dict(color='#f9fafb', size=7, line=dict(color='#f97316', width=2)),
+                text=pts_txt,
+                textposition=pts_pos,
+                textfont=dict(color='#f9fafb', size=12, family="JetBrains Mono"),
+                name='Estados (1-4)',
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=pts_hover
             ))
 
         fig.update_layout(
@@ -496,7 +538,6 @@ try:
     with tab_procedimiento:
         st.markdown("#### Solución Analítica de los Incisos (Paso a Paso)")
         
-        # Botón para regenerar o calcular si se ingresó a mano
         col_btn, _ = st.columns([1.5, 2])
         with col_btn:
             if st.button("⚡ Calcular / Actualizar Solución con IA", type="primary", use_container_width=True):
@@ -507,7 +548,7 @@ try:
         if st.session_state["solucion_texto"]:
             st.markdown(f'<div class="incisos-box">{st.session_state["solucion_texto"]}</div>', unsafe_allow_html=True)
         else:
-            st.info("Configura los parámetros en la barra lateral izquierda y presiona el botón **'⚡ Calcular / Actualizar Solución con IA'** para generar el procedimiento completo.")
+            st.info("Configura los parámetros en la barra lateral izquierda y presiona el botón **'⚡ Resolver Ciclo con IA'** para generar el procedimiento completo.")
 
 except Exception as err:
     st.error(f"Error procesando propiedades en CoolProp: {err}")
