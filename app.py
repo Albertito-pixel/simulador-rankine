@@ -205,8 +205,51 @@ with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
     TH = st.number_input("Temp. Fuente (T_H) [K]", value=float(st.session_state["TH"]))
     T0 = st.number_input("Temp. Ambiente (T_0) [K]", value=float(st.session_state["T0"]))
 
+def resolver_manual_con_ia():
+    desc_fwh = "\n".join([f"- Calentador #{i+1}: {c['tipo']} a {c['presion']} kPa" for i, c in enumerate(fwh_configuracion)])
+    prompt_manual = f"""
+    Eres un profesor de Termodinámica experto en ciclos Rankine.
+    Un estudiante ingresó estos parámetros exactos del ciclo:
+    - Presión Caldera: {P_cald} kPa ({(P_cald/1000):.2f} MPa)
+    - Temperatura Vapor Vivo: {T_max} °C
+    - Presión Condensador: {P_cond} kPa
+    - Recalentamiento: {"Sí, a " + str(P_recal) + " kPa y " + str(T_recal) + " °C" if tiene_recal else "No"}
+    - Calentadores de Agua de Alimentación (FWH): {num_fwh}
+    {desc_fwh if num_fwh > 0 else "- Ninguno"}
+    - Eficiencias Isentrópicas: Turbina {eta_t*100:.1f}%, Bomba {eta_p*100:.1f}%
+    - Entorno: T_fuente = {TH} K, T_ambiente = {T0} K
+
+    TAREA:
+    Resuelve el problema paso a paso de forma analítica y rigurosa:
+    1. Propiedades de los estados principales (entalpías y entropías).
+    2. Fracciones de vapor extraído (y, z, etc.) mediante balance de energía y masa en los calentadores abiertos/cerrados.
+    3. Trabajo neto específico (W_neto) y calor suministrado (Q_in).
+    4. Eficiencia térmica del ciclo (η_th).
+    5. Análisis de Segunda Ley: Exergía destruida (en componentes clave y total) y Eficiencia de la Segunda Ley (η_II).
+    
+    Escribe el procedimiento con fórmulas claras y resalta los resultados numéricos finales en negrita.
+    """
+    for intento in range(3):
+        try:
+            res_m = client.models.generate_content(
+                model="gemini-flash-latest",
+                contents=[prompt_manual]
+            )
+            st.session_state["solucion_texto"] = res_m.text
+            break
+        except Exception:
+            time.sleep(2)
+
+# Botón directo en la barra lateral para resolver a mano
+st.sidebar.markdown("---")
+if st.sidebar.button("⚡ Resolver Ciclo con IA", type="primary", use_container_width=True):
+    with st.spinner("Calculando balances, fracciones y eficiencias con IA..."):
+        resolver_manual_con_ia()
+        st.sidebar.success("¡Solución analítica generada!")
+        st.rerun()
+
 # ==========================================
-# CÁLCULOS TERMODINÁMICOS REALES
+# CÁLCULOS TERMODINÁMICOS REALES (CoolProp)
 # ==========================================
 fluido = 'Water'
 P_cald_Pa = P_cald * 1e3
@@ -451,11 +494,20 @@ try:
             st.dataframe(t_fwh, use_container_width=True, hide_index=True)
 
     with tab_procedimiento:
-        st.markdown("#### Solución Detallada de los Incisos (Paso a Paso)")
+        st.markdown("#### Solución Analítica de los Incisos (Paso a Paso)")
+        
+        # Botón para regenerar o calcular si se ingresó a mano
+        col_btn, _ = st.columns([1.5, 2])
+        with col_btn:
+            if st.button("⚡ Calcular / Actualizar Solución con IA", type="primary", use_container_width=True):
+                with st.spinner("Generando solución analítica completa con IA..."):
+                    resolver_manual_con_ia()
+                    st.rerun()
+
         if st.session_state["solucion_texto"]:
             st.markdown(f'<div class="incisos-box">{st.session_state["solucion_texto"]}</div>', unsafe_allow_html=True)
         else:
-            st.info("Sube una captura de un problema en la barra lateral izquierda y presiona 'Analizar y Cargar' para ver aquí la resolución de los incisos.")
+            st.info("Configura los parámetros en la barra lateral izquierda y presiona el botón **'⚡ Calcular / Actualizar Solución con IA'** para generar el procedimiento completo.")
 
 except Exception as err:
     st.error(f"Error procesando propiedades en CoolProp: {err}")
