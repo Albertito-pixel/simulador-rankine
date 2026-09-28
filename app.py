@@ -320,12 +320,16 @@ try:
         "📝 Procedimiento / Incisos"
     ])
 
-    with tab_ts:
-        # Formato de títulos de presión
+with tab_ts:
+        # ========================================================
+        # 🎨 DEFINE AQUÍ EL COLOR DE LA LÍNEA DEL CICLO:
+        # ========================================================
+        COLOR_CICLO = "#00d2ff"     # Ejemplo: #00d2ff (Cyan), #00ff88 (Verde), #ffd000 (Amarillo), #a855f7 (Púrpura)
+        COLOR_CAMPANA = "#47505e"   # Gris sutil de fondo
+
         str_pcald = f"{P_cald/1000:.1f} MPa" if P_cald >= 1000 else f"{P_cald:.0f} kPa"
         str_pcond = f"{P_cond/1000:.2f} MPa" if P_cond >= 1000 else f"{P_cond:.0f} kPa"
 
-        # Campana de saturación en gris neutro fino
         T_crit = CP.PropsSI('Tcrit', fluido)
         T_campana = np.linspace(273.16, T_crit - 0.2, 250)
         s_liq = [CP.PropsSI('S', 'T', t, 'Q', 0, fluido)/1e3 for t in T_campana]
@@ -338,120 +342,65 @@ try:
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
             mode='lines',
-            line=dict(color='#47505e', width=1.4),
+            line=dict(color=COLOR_CAMPANA, width=1.4),
             name='Campana',
             hoverinfo='skip'
         ))
 
-        # Propiedades de la caldera
         T_sat_cald = CP.PropsSI('T', 'P', P_cald_Pa, 'Q', 0, fluido) - 273.15
         s_f_cald = CP.PropsSI('S', 'P', P_cald_Pa, 'Q', 0, fluido) / 1e3
         s_g_cald = CP.PropsSI('S', 'P', P_cald_Pa, 'Q', 1, fluido) / 1e3
-
-        # Curva de sobrecalentamiento real con CoolProp (swoop hacia arriba)
         T_sup = np.linspace(T_sat_cald + 0.1, T_max, 35)
         s_sup = [CP.PropsSI('S', 'P', P_cald_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
 
-        # Flechas de anotación del gráfico
         flechas_anotaciones = []
 
-        # ====================================================
-        # CASO A: CICLO CON 1 CALENTADOR REGENERATIVO (IDÉNTICO A LA FOTO)
-        # ====================================================
         if num_fwh == 1 and not tiene_recal:
             p_fwh_Pa = fwh_configuracion[0]['presion'] * 1e3
             str_pfwh = f"{fwh_configuracion[0]['presion']/1000:.1f} MPa" if fwh_configuracion[0]['presion'] >= 1000 else f"{fwh_configuracion[0]['presion']:.0f} kPa"
-            
             T_sat_fwh = CP.PropsSI('T', 'P', p_fwh_Pa, 'Q', 0, fluido) - 273.15
             s_f_fwh = CP.PropsSI('S', 'P', p_fwh_Pa, 'Q', 0, fluido) / 1e3
             s_g_fwh = CP.PropsSI('S', 'P', p_fwh_Pa, 'Q', 1, fluido) / 1e3
 
-            # Estados didácticos
-            # 1: Salida condensador
             pt1 = (s1/1e3, T1)
-            # 2: Salida Bomba 1 (despegado didácticamente)
             pt2 = (s1/1e3, T1 + 28.0)
-            # 3: Salida del calentador abierto (líquido saturado a P_fwh)
             pt3 = (s_f_fwh, T_sat_fwh)
-            # 4: Salida Bomba 2 (despegado hacia la caldera)
             pt4 = (s_f_fwh, T_sat_fwh + 18.0)
-            # 5: Entrada a turbina (vapor vivo)
             pt5 = (s_in_turb/1e3, T_max)
-            # 6: Extracción hacia el FWH
             h_6_iso = CP.PropsSI('H', 'P', p_fwh_Pa, 'S', s_in_turb, fluido)
             t_6 = get_T_safe(p_fwh_Pa, h_6_iso)
             pt6 = (s_in_turb/1e3, t_6)
-            # 7: Salida de turbina hacia condensador
             pt7 = (s_out_turb/1e3, T_out_turb)
 
-            # Trayectoria líquida 2 -> 3
             T_liq_23 = np.linspace(pt2[1], pt3[1], 20)
             s_liq_23 = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq_23]
-
-            # Trayectoria líquida 4 -> ebullición caldera
             T_liq_4c = np.linspace(pt4[1], T_sat_cald, 25)
             s_liq_4c = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in T_liq_4c]
 
-            # Unir ciclo continuo
             x_ciclo = [pt1[0], pt2[0]] + s_liq_23 + [pt3[0], pt4[0]] + s_liq_4c + [s_f_cald, s_g_cald] + list(s_sup) + [pt6[0], pt7[0], pt1[0]]
             y_ciclo = [pt1[1], pt2[1]] + list(T_liq_23) + [pt3[1], pt4[1]] + list(T_liq_4c) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt6[1], pt7[1], pt1[1]]
 
-            fig.add_trace(go.Scatter(
-                x=x_ciclo, y=y_ciclo,
-                mode='lines',
-                line=dict(color='#ff6b35', width=2.4),
-                name='Ciclo',
-                hoverinfo='skip'
-            ))
+            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=COLOR_CICLO, width=2.4), name='Ciclo', hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=[pt6[0], s_g_fwh, pt3[0]], y=[pt6[1], T_sat_fwh, pt3[1]], mode='lines', line=dict(color=COLOR_CICLO, width=2.0), name='Extracción', hoverinfo='skip'))
 
-            # Extracción FWH (línea horizontal desde 6 hacia 3)
-            fig.add_trace(go.Scatter(
-                x=[pt6[0], s_g_fwh, pt3[0]],
-                y=[pt6[1], T_sat_fwh, pt3[1]],
-                mode='lines',
-                line=dict(color='#ff6b35', width=2.0),
-                name='Extracción FWH',
-                hoverinfo='skip'
-            ))
-
-            # Marcadores cuadrados blancos idénticos a la foto
             pts_x = [pt1[0], pt2[0], pt3[0], pt4[0], pt5[0], pt6[0], pt7[0]]
             pts_y = [pt1[1], pt2[1], pt3[1], pt4[1], pt5[1], pt6[1], pt7[1]]
             pts_txt = ["1", "2", "3", "4", "5", "6", "7"]
             pts_pos = ["bottom left", "top left", "bottom left", "top left", "middle right", "middle right", "middle right"]
 
-            fig.add_trace(go.Scatter(
-                x=pts_x, y=pts_y,
-                mode='markers+text',
-                marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
-                text=pts_txt,
-                textposition=pts_pos,
-                textfont=dict(color='white', size=12, family="Inter, sans-serif", weight='bold'),
-                name='Estados',
-                hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"
-            ))
+            fig.add_trace(go.Scatter(x=pts_x, y=pts_y, mode='markers+text', marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)), text=pts_txt, textposition=pts_pos, textfont=dict(color='white', size=12, family="Inter", weight='bold'), name='Estados', hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"))
 
-            # Rótulos de texto con flechas en las líneas (como en la captura)
             flechas_anotaciones = [
-                # 15 MPa en caldera
                 dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
-                # 1.2 MPa en FWH
                 dict(x=(pt3[0] + pt6[0])/2, y=T_sat_fwh + 10, text=f"<b>{str_pfwh}</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=(pt3[0] + pt6[0])/2 + 1.2, y=T_sat_fwh + 10, text="y ◀", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                # 10 kPa en condensador
                 dict(x=(pt1[0] + pt7[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}</b>", showarrow=False, font=dict(color='white', size=11)),
-                # Flechas verticales de expansión
                 dict(x=pt5[0] + 0.18, y=(pt5[1] + pt6[1])/2, text="1 ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
                 dict(x=pt6[0] + 0.32, y=(pt6[1] + pt7[1])/2, text="(1-y) ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                # Flecha subida bomba 1
-                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color='#ff6b35', size=10)),
-                # Flecha calentamiento líquido
-                dict(x=(pt2[0] + pt3[0])/2, y=(pt2[1] + pt3[1])/2 + 4, text="▶", showarrow=False, font=dict(color='#ff6b35', size=9))
+                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=COLOR_CICLO, size=10)),
+                dict(x=(pt2[0] + pt3[0])/2, y=(pt2[1] + pt3[1])/2 + 4, text="▶", showarrow=False, font=dict(color=COLOR_CICLO, size=9))
             ]
 
-        # ====================================================
-        # CASO B: CICLO RANKINE SIMPLE (4 ESTADOS)
-        # ====================================================
         elif num_fwh == 0 and not tiene_recal:
             pt1 = (s1/1e3, T1)
             pt2 = (s1/1e3, T1 + 30.0)
@@ -464,45 +413,26 @@ try:
             x_ciclo = [pt1[0], pt2[0]] + s_liq + [s_f_cald, s_g_cald] + list(s_sup) + [pt4[0], pt1[0]]
             y_ciclo = [pt1[1], pt2[1]] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt4[1], pt1[1]]
 
-            fig.add_trace(go.Scatter(
-                x=x_ciclo, y=y_ciclo,
-                mode='lines',
-                line=dict(color='#ff6b35', width=2.4),
-                name='Ciclo',
-                hoverinfo='skip'
-            ))
+            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=COLOR_CICLO, width=2.4), name='Ciclo', hoverinfo='skip'))
 
             pts_x = [pt1[0], pt2[0], pt3[0], pt4[0]]
             pts_y = [pt1[1], pt2[1], pt3[1], pt4[1]]
             pts_txt = ["1", "2", "3", "4"]
             pts_pos = ["bottom left", "top left", "middle right", "middle right"]
 
-            fig.add_trace(go.Scatter(
-                x=pts_x, y=pts_y,
-                mode='markers+text',
-                marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
-                text=pts_txt,
-                textposition=pts_pos,
-                textfont=dict(color='white', size=12, family="Inter, sans-serif", weight='bold'),
-                name='Estados',
-                hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"
-            ))
+            fig.add_trace(go.Scatter(x=pts_x, y=pts_y, mode='markers+text', marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)), text=pts_txt, textposition=pts_pos, textfont=dict(color='white', size=12, family="Inter", weight='bold'), name='Estados', hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"))
 
             flechas_anotaciones = [
                 dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=(pt1[0] + pt4[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=pt3[0] + 0.18, y=(pt3[1] + pt4[1])/2, text="1 ▼", showarrow=False, font=dict(color='#cbd5e1', size=10)),
-                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color='#ff6b35', size=10))
+                dict(x=pt1[0] - 0.08, y=(pt1[1] + pt2[1])/2, text="▲", showarrow=False, font=dict(color=COLOR_CICLO, size=10))
             ]
 
-        # ====================================================
-        # CASO C: CICLOS CON RECALENTAMIENTO / MÚLTIPLES FWH
-        # ====================================================
         else:
             p_fwh_abierto = min(f['presion'] for f in fwh_configuracion) * 1e3 if num_fwh > 0 else P_cond_Pa
             h_10_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
             t_10 = get_T_safe(P_recal_Pa, h_10_iso)
-            
             T_rec_c = np.linspace(t_10 + 273.15, T_recal_K, 15)
             s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t, fluido)/1e3 for t in T_rec_c]
 
@@ -519,38 +449,20 @@ try:
             x_ciclo = [pt1[0], pt2[0]] + s_liq + [s_f_cald, s_g_cald] + list(s_sup) + [pt_rec_sal[0]] + s_rec_c + [pt_rec_in[0], pt_out[0], pt1[0]]
             y_ciclo = [pt1[1], pt2[1]] + list(T_liq) + [T_sat_cald, T_sat_cald] + list(T_sup) + [pt_rec_sal[1]] + [t-273.15 for t in T_rec_c] + [pt_rec_in[1], pt_out[1], pt1[1]]
 
-            fig.add_trace(go.Scatter(
-                x=x_ciclo, y=y_ciclo,
-                mode='lines',
-                line=dict(color='#ff6b35', width=2.4),
-                name='Ciclo',
-                hoverinfo='skip'
-            ))
+            fig.add_trace(go.Scatter(x=x_ciclo, y=y_ciclo, mode='lines', line=dict(color=COLOR_CICLO, width=2.4), name='Ciclo', hoverinfo='skip'))
 
             pts_x = [pt1[0], pt2[0], pt_in[0], pt_rec_sal[0], pt_rec_in[0], pt_out[0]]
             pts_y = [pt1[1], pt2[1], pt_in[1], pt_rec_sal[1], pt_rec_in[1], pt_out[1]]
             pts_txt = ["1", "2", "3", "4", "5", "6"]
             pts_pos = ["bottom left", "top left", "middle right", "middle right", "middle right", "middle right"]
 
-            fig.add_trace(go.Scatter(
-                x=pts_x, y=pts_y,
-                mode='markers+text',
-                marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
-                text=pts_txt,
-                textposition=pts_pos,
-                textfont=dict(color='white', size=12, family="Inter, sans-serif", weight='bold'),
-                name='Estados',
-                hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"
-            ))
+            fig.add_trace(go.Scatter(x=pts_x, y=pts_y, mode='markers+text', marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)), text=pts_txt, textposition=pts_pos, textfont=dict(color='white', size=12, family="Inter", weight='bold'), name='Estados', hovertemplate="<b>Estado %{text}</b><br>T: %{y:.1f} °C<br>s: %{x:.3f} kJ/kg·K<extra></extra>"))
 
             flechas_anotaciones = [
                 dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{str_pcald}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=(pt1[0] + pt_out[0])/2, y=pt1[1] + 10, text=f"<b>{str_pcond}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
             ]
 
-        # ==========================================
-        # ESTILO DEL LIENZO (DARK TEXTBOOK LOOK)
-        # ==========================================
         fig.update_layout(
             paper_bgcolor='#111317',
             plot_bgcolor='#111317',
