@@ -338,7 +338,7 @@ try:
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
             mode='lines',
-            line=dict(color='#00f0ff', width=1.4),
+            line=dict(color='#47505e', width=1.4),
             name='Campana',
             hoverinfo='skip'
         ))
