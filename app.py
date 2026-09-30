@@ -75,6 +75,14 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 1px;
     }
+
+    [data-testid="collapsedControl"] {
+        display: none;
+    }
+    section[data-testid="stSidebar"] {
+        width: 300px !important;
+        display: flex !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
