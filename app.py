@@ -76,9 +76,13 @@ st.markdown("""
         letter-spacing: 1px;
     }
 
-   /* Eliminar el botón por completo para dejar la columna fija para siempre */
-    [data-testid="collapsedControl"] {
+   /* Ocultar el botón de colapsar la barra lateral de forma definitiva */
+    [data-testid="collapsedControl"], 
+    button[kind="header"], 
+    div[data-testid="collapsedControl"] {
         display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
