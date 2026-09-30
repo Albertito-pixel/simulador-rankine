@@ -765,9 +765,9 @@ try:
                 st.rerun()
 
         if st.session_state["solucion_texto"]:
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.markdown(st.session_state["solucion_texto"])
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown(st.session_state["solucion_texto"])
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("Presiona el botón **'⚡ Generar / Actualizar Memoria de Cálculo'** para desplegar el balance de masa, energía y factor de utilización.")
 
