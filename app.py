@@ -18,45 +18,61 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    
+    /* Ocultar el menú superior y el footer por defecto de Streamlit para que parezca una app real */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Fondo global oscuro y moderno */
     .stApp {
         background-color: #0b0f19;
+        background-image: radial-gradient(circle at 50% 0%, #1a2235 0%, #0b0f19 70%);
     }
-    
-    .hero-box {
-        background: linear-gradient(135deg, #090d16 0%, #111827 50%, #1e293b 100%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        padding: 1.4rem 1.8rem;
-        margin-bottom: 1.2rem;
+
+    /* Títulos con gradiente estilo Apple/Awwwards */
+    .gradient-text {
+        font-family: 'Inter', sans-serif;
+        background: linear-gradient(90deg, #00f2fe 0%, #4facfe 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 20px;
     }
-    
-    .hero-title {
-        font-size: 1.8rem;
+
+    /* Tarjetas estilo Glassmorphism (Cristal) para la Memoria de Cálculo */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease, border 0.3s ease;
+    }
+
+    /* Animación al pasar el mouse (Hover) */
+    .glass-card:hover {
+        transform: translateY(-5px);
+        border: 1px solid rgba(79, 172, 254, 0.3);
+        box-shadow: 0 10px 40px rgba(0, 242, 254, 0.1);
+    }
+
+    /* Estilo para los números y resultados destacados */
+    .highlight-number {
+        font-size: 2rem;
+        color: #fff;
         font-weight: 700;
-        color: #f8fafc;
-        margin: 0;
+        font-family: 'JetBrains Mono', monospace;
     }
     
-    .hero-sub {
-        color: #94a3b8;
+    .label-text {
+        color: #8b9eb7;
         font-size: 0.9rem;
-        margin-top: 0.3rem;
-    }
-    
-    .incisos-box {
-        background: #111827;
-        border: 1px solid #1f2937;
-        border-left: 4px solid #ff6b35;
-        border-radius: 8px;
-        padding: 1.8rem;
-        color: #e5e7eb;
-        line-height: 1.7;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -749,9 +765,9 @@ try:
                 st.rerun()
 
         if st.session_state["solucion_texto"]:
-            st.markdown('<div class="incisos-box">', unsafe_allow_html=True)
-            st.markdown(st.session_state["solucion_texto"])
-            st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown(st.session_state["solucion_texto"])
+    st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("Presiona el botón **'⚡ Generar / Actualizar Memoria de Cálculo'** para desplegar el balance de masa, energía y factor de utilización.")
 
