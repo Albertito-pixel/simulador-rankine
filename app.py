@@ -83,10 +83,11 @@ st.markdown("""
     <div class="hero-sub">Simulador térmico integral: ciclos de potencia regenerativos con trampas/bombas, cogeneración y diagramas T-s dinámicos.</div>
 </div>
 """, unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8b9eb7; font-size: 1.1rem; margin-top: -15px;'>Desarrollado por: Alberto Mendieta | Cédula: 6-728-80 | UTP Azuero</p>", unsafe_allow_html=True)
 
-API_KEY = "AQ.Ab8RN6JKJe6A73xhJiwhAarynVw4JfkT5I-_XBvHcOUQkuX-OQ"
+
 try:
-    client = genai.Client(api_key=API_KEY)
+    client = genai.Client(api_key=st.secrets["API_KEY"])
 except Exception:
     client = None
 
