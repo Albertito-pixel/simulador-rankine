@@ -19,10 +19,9 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Ocultar el menú superior y el footer por defecto de Streamlit para que parezca una app real */
+    /* Ocultar el menú superior y el footer, PERO mantener visible el header para que no borre la flecha */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
 
     /* Fondo global oscuro y moderno */
     .stApp {
