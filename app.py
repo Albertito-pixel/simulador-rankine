@@ -76,17 +76,9 @@ st.markdown("""
         letter-spacing: 1px;
     }
 
-    /* Forzar a que la flecha del menú siempre sea visible y de color celeste */
+   /* Eliminar el botón por completo para dejar la columna fija para siempre */
     [data-testid="collapsedControl"] {
-        display: flex !important;
-        color: #38bdf8 !important;
-        background-color: rgba(15, 23, 42, 0.9) !important;
-        border: 1px solid #38bdf8 !important;
-        border-radius: 5px !important;
-        z-index: 999999 !important; 
-    }
-    [data-testid="collapsedControl"] svg {
-        fill: #38bdf8 !important;
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
