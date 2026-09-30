@@ -76,13 +76,23 @@ st.markdown("""
         letter-spacing: 1px;
     }
 
-   /* Ocultar el botón de colapsar la barra lateral de forma definitiva */
-    [data-testid="collapsedControl"], 
-    button[kind="header"], 
-    div[data-testid="collapsedControl"] {
-        display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
+   /* Sacar la flechita de la barra lateral y dejarla flotando fija en la esquina superior izquierda */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: #0f172a !important;
+        border: 1px solid #38bdf8 !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    /* Pintar la flechita de color celeste para que destaque */
+    [data-testid="collapsedControl"] svg {
+        fill: #38bdf8 !important;
     }
 </style>
 """, unsafe_allow_html=True)
