@@ -387,131 +387,119 @@ try:
             s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
             T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
         else:
-            # =================================================================
-            # NUEVO MOTOR DE CÁLCULO: CICLO REGENERATIVO Y BALANCES DE MASA
-            # =================================================================
+        # =================================================================
+        # NUEVO MOTOR DE CÁLCULO: CICLO REGENERATIVO Y BALANCES DE MASA
+        # =================================================================
             h_cond_out = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
-            s_cond_out = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
-            v_cond = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
-            T_cond_out = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
+        s_cond_out = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
+        v_cond = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
+        T_cond_out = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
 
-            h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
-            s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
+        h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
+        s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
 
-            # 1. Obtener estados de expansión y extracciones
-            fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
-            extracciones = []
+        # 1. Obtener estados de expansión y extracciones
+        fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
+        extracciones = []
+        
+        for f in fwh_ord:
+            P_ext = f['presion'] * 1e3
+            if tiene_recal and P_ext <= P_recal_Pa:
+                s_ref = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
+                h_in_stage = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
+            else:
+                s_ref = s_in_turb
+                h_in_stage = h_in_turb
             
-            for f in fwh_ord:
-                P_ext = f['presion'] * 1e3
-                if tiene_recal and P_ext <= P_recal_Pa:
-                    s_ref = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-                    h_in_stage = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-                else:
-                    s_ref = s_in_turb
-                    h_in_stage = h_in_turb
-                
-                h_iso = CP.PropsSI('H', 'P', P_ext, 'S', s_ref, fluido)
-                h_ext = h_in_stage - eta_t * (h_in_stage - h_iso)
-                
-                extracciones.append({
-                    'P': P_ext, 'h': h_ext, 'tipo': f['tipo'], 'drenaje': f['drenaje'],
-                    'hf': CP.PropsSI('H', 'P', P_ext, 'Q', 0, fluido),
-                    'Tsat': CP.PropsSI('T', 'P', P_ext, 'Q', 0, fluido) - 273.15,
-                    'vf': 1 / CP.PropsSI('D', 'P', P_ext, 'Q', 0, fluido),
-                    'y': 0.0 # Fracción másica a calcular
-                })
+            h_iso = CP.PropsSI('H', 'P', P_ext, 'S', s_ref, fluido)
+            h_ext = h_in_stage - eta_t * (h_in_stage - h_iso)
+            
+            extracciones.append({
+                'P': P_ext, 'h': h_ext, 'tipo': f['tipo'], 'drenaje': f['drenaje'],
+                'hf': CP.PropsSI('H', 'P', P_ext, 'Q', 0, fluido),
+                'Tsat': CP.PropsSI('T', 'P', P_ext, 'Q', 0, fluido) - 273.15,
+                'vf': 1 / CP.PropsSI('D', 'P', P_ext, 'Q', 0, fluido),
+                'y': 0.0
+            })
 
-            # Recalentamiento
-            q_recal = 0.0
+        # Recalentamiento
+        q_recal = 0.0
+        if tiene_recal:
+            h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
+            h_rec_sal = h_in_turb - eta_t * (h_in_turb - h_rec_iso)
+            h_rec_in2 = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
+            s_rec_in2 = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
+            q_recal_especifico = h_rec_in2 - h_rec_sal
+            s_out_ref = s_rec_in2
+            h_in_bp = h_rec_in2
+        else:
+            s_out_ref = s_in_turb
+            h_in_bp = h_in_turb
+
+        # Escape al condensador
+        h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_out_ref, fluido)
+        h_out_turb = h_in_bp - eta_t * (h_in_bp - h_out_s)
+        s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
+        T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
+
+        # 2. Balances de Masa y Energía Secuenciales
+        w_bombas_total = 0.0
+
+        if len(extracciones) == 2 and "Cerrado" in extracciones[0]['tipo'] and "Abierto" in extracciones[1]['tipo']:
+            ext1, ext2 = extracciones[0], extracciones[1]
+            
+            h_out_fwh1 = CP.PropsSI('H', 'P', P_cald_Pa, 'T', ext1['Tsat'] + 273.15, fluido)
+            h_drain1 = ext1['hf']
+            
+            w_bomba1 = v_cond * (ext2['P'] - P_cond_Pa) / eta_p
+            h_fw_in2 = h_cond_out + w_bomba1
+            
+            h_fw_out2 = ext2['hf']
+            w_bomba2 = ext2['vf'] * (P_cald_Pa - ext2['P']) / eta_p
+            h_fw_in1 = h_fw_out2 + w_bomba2
+            
+            y1 = (h_out_fwh1 - h_fw_in1) / (ext1['h'] - h_drain1)
+            
+            if "Bomba" in ext1['drenaje']:
+                y2 = (1 - y1) * (h_fw_out2 - h_fw_in2) / (ext2['h'] - h_fw_in2)
+                
+                w_bomba_dren = ext1['vf'] * (P_cald_Pa - ext1['P']) / eta_p
+                h_drain1_pumped = h_drain1 + w_bomba_dren
+                
+                h_in_cald = (1 - y1) * h_out_fwh1 + y1 * h_drain1_pumped
+                w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1 - y1) * w_bomba2 + y1 * w_bomba_dren
+                
+            else: 
+                y2 = ((1 - y1) * h_fw_out2 - (1 - y1) * h_fw_in2 - y1 * (h_drain1 - h_fw_in2)) / (ext2['h'] - h_fw_in2)
+                h_in_cald = h_out_fwh1
+                w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1) * w_bomba2
+
+            w_t = 1.0 * (h_in_turb - ext1['h'])
             if tiene_recal:
-                h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-                h_rec_sal = h_in_turb - eta_t * (h_in_turb - h_rec_iso)
-                h_rec_in2 = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-                s_rec_in2 = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-                q_recal_especifico = h_rec_in2 - h_rec_sal
-                s_out_ref = s_rec_in2
-                h_in_bp = h_rec_in2
+                q_recal = (1 - y1) * q_recal_especifico
+                w_t += (1 - y1) * (h_rec_in2 - ext2['h'])
             else:
-                s_out_ref = s_in_turb
-                h_in_bp = h_in_turb
-
-            # Escape al condensador
-            h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_out_ref, fluido)
-            h_out_turb = h_in_bp - eta_t * (h_in_bp - h_out_s)
-            s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
-            T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
-
-            # 2. Balances de Masa y Energía Secuenciales
-            w_bombas_total = 0.0
-
-            # Algoritmo de resolución exacto para Configuración de 2 Calentadores (Ej. 10-6 Çengel)
-            if len(extracciones) == 2 and "Cerrado" in extracciones[0]['tipo'] and "Abierto" in extracciones[1]['tipo']:
-                ext1, ext2 = extracciones[0], extracciones[1]
+                w_t += (1 - y1) * (ext1['h'] - ext2['h'])
                 
-                # Estado de salida del calentador cerrado (idealmente a Tsat de la extracción)
-                h_out_fwh1 = CP.PropsSI('H', 'P', P_cald_Pa, 'T', ext1['Tsat'] + 273.15, fluido)
-                h_drain1 = ext1['hf']
-                
-                # FWH 2 (Abierto): Bomba I desde el condensador
-                w_bomba1 = v_cond * (ext2['P'] - P_cond_Pa) / eta_p
-                h_fw_in2 = h_cond_out + w_bomba1
-                
-                # FWH 2 (Abierto): Bomba II desde el abierto hacia el cerrado
-                h_fw_out2 = ext2['hf']
-                w_bomba2 = ext2['vf'] * (P_cald_Pa - ext2['P']) / eta_p
-                h_fw_in1 = h_fw_out2 + w_bomba2
-                
-                # Balance Térmico FWH 1 (Cerrado) -> Hallar y1
-                y1 = (h_out_fwh1 - h_fw_in1) / (ext1['h'] - h_drain1)
-                
-                # Si el FWH1 bombea el drenaje hacia adelante (Cámara de mezcla)
-                if "Bomba" in ext1['drenaje']:
-                    # Balance Térmico FWH 2 (Abierto) -> Hallar y2
-                    y2 = (1 - y1) * (h_fw_out2 - h_fw_in2) / (ext2['h'] - h_fw_in2)
-                    
-                    # Bomba III (Drenaje del cerrado hacia la caldera)
-                    w_bomba_dren = ext1['vf'] * (P_cald_Pa - ext1['P']) / eta_p
-                    h_drain1_pumped = h_drain1 + w_bomba_dren
-                    
-                    # Cámara de mezcla final (Agua precalentada que entra a caldera)
-                    h_in_cald = (1 - y1) * h_out_fwh1 + y1 * h_drain1_pumped
-                    w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1 - y1) * w_bomba2 + y1 * w_bomba_dren
-                    
-                else: 
-                    # Si el drenaje cae en cascada al FWH 2
-                    y2 = ((1 - y1) * h_fw_out2 - (1 - y1) * h_fw_in2 - y1 * (h_drain1 - h_fw_in2)) / (ext2['h'] - h_fw_in2)
-                    h_in_cald = h_out_fwh1
-                    w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1) * w_bomba2
+            w_t += (1 - y1 - y2) * (ext2['h'] - h_out_turb)
 
-                # Trabajo neto de turbina fraccionado
-                w_t = 1.0 * (h_in_turb - ext1['h']) # Turbina de Alta
-                if tiene_recal:
-                    # El recalentamiento solo se aplica a la masa (1 - y1)
-                    q_recal = (1 - y1) * q_recal_especifico
-                    w_t += (1 - y1) * (h_rec_in2 - ext2['h']) # Turbina Baja (hasta ext2)
-                else:
-                    w_t += (1 - y1) * (ext1['h'] - ext2['h'])
-                    
-                w_t += (1 - y1 - y2) * (ext2['h'] - h_out_turb) # Turbina Baja (hasta condensador)
+        else:
+            h_in_cald = CP.PropsSI('H', 'P', P_cald_Pa, 'Q', 0, fluido) 
+            w_t = h_in_turb - h_out_turb 
+            w_bombas_total = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
 
-            else:
-                # Fallback aproximado si se usa otra configuración genérica
-                h_in_cald = CP.PropsSI('H', 'P', P_cald_Pa, 'Q', 0, fluido) 
-                w_t = h_in_turb - h_out_turb 
-                w_bombas_total = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
+        # 3. Resultados Finales
+        q_in = (h_in_turb - h_in_cald) + q_recal
+        w_neto = w_t - w_bombas_total
+        W_dot_neto = (m_dot * w_neto) / 1e3
+        Q_dot_in = (m_dot * q_in) / 1e3
+        Q_dot_proc = 0.0
+        eps_u = (w_neto / q_in) * 100.0 if q_in > 0 else 0.0
+        eta_th = eps_u
+        w_rev = q_in * (1.0 - (T0 / TH))
+        eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
 
-            # 3. Resultados Finales
-            q_in = (h_in_turb - h_in_cald) + q_recal
-            w_neto = w_t - w_bombas_total
-            W_dot_neto = (m_dot * w_neto) / 1e3
-            Q_dot_in = (m_dot * q_in) / 1e3
-            Q_dot_proc = 0.0
-            eps_u = (w_neto / q_in) * 100.0 if q_in > 0 else 0.0
-            eta_th = eps_u
-            w_rev = q_in * (1.0 - (T0 / TH))
-            eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
-# --- VARIABLES PARA QUE LA TABLA NO FALLE ---
+        # --- VARIABLES PARA QUE LA TABLA NO FALLE ---
         h2 = h_in_cald
         s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
         T2 = get_T_safe(P_cald_Pa, h2)
