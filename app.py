@@ -19,17 +19,12 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Ocultar el menú superior y el footer, PERO mantener visible el header para que no borre la flecha */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-
-    /* Fondo global oscuro y moderno */
     .stApp {
         background-color: #0b0f19;
         background-image: radial-gradient(circle at 50% 0%, #1a2235 0%, #0b0f19 70%);
     }
-
-    /* Títulos con gradiente estilo Apple/Awwwards */
     .gradient-text {
         font-family: 'Inter', sans-serif;
         background: linear-gradient(90deg, #00f2fe 0%, #4facfe 100%);
@@ -39,8 +34,6 @@ st.markdown("""
         font-weight: 800;
         margin-bottom: 20px;
     }
-
-    /* Tarjetas estilo Glassmorphism (Cristal) para la Memoria de Cálculo */
     .glass-card {
         background: rgba(255, 255, 255, 0.03);
         backdrop-filter: blur(16px);
@@ -52,30 +45,23 @@ st.markdown("""
         box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
         transition: transform 0.3s ease, border 0.3s ease;
     }
-
-    /* Animación al pasar el mouse (Hover) */
     .glass-card:hover {
         transform: translateY(-5px);
         border: 1px solid rgba(79, 172, 254, 0.3);
         box-shadow: 0 10px 40px rgba(0, 242, 254, 0.1);
     }
-
-    /* Estilo para los números y resultados destacados */
     .highlight-number {
         font-size: 2rem;
         color: #fff;
         font-weight: 700;
         font-family: 'JetBrains Mono', monospace;
     }
-    
     .label-text {
         color: #8b9eb7;
         font-size: 0.9rem;
         text-transform: uppercase;
         letter-spacing: 1px;
     }
-
-   /* Sacar la flechita de la barra lateral y dejarla flotando fija en la esquina superior izquierda */
     [data-testid="collapsedControl"] {
         display: flex !important;
         position: fixed !important;
@@ -88,8 +74,6 @@ st.markdown("""
         padding: 8px !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
     }
-    
-    /* Pintar la flechita de color celeste para que destaque */
     [data-testid="collapsedControl"] svg {
         fill: #38bdf8 !important;
     }
@@ -262,7 +246,6 @@ else:
             p_sug = float(P_cald / (i + 2))
             p_sel = st.number_input(f"P [kPa] #{i+1}", min_value=float(P_cond), max_value=float(P_cald), value=p_sug, step=100.0, key=f"p_{i}")
         
-        # Selector dinámico: Trampa de Vapor vs Bomba de Drenaje
         dren_sel = "Mezcla Directa"
         if "Cerrado" in t_sel:
             dren_sel = st.sidebar.radio(
@@ -280,7 +263,6 @@ with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
     T0 = st.number_input("Temp. Ambiente (T_0) [K]", value=float(st.session_state["T0"]))
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎨 Apariencia del Gráfico")
 color_ciclo = st.sidebar.color_picker("Color de la Línea del Ciclo", value="#00d2ff")
 color_campana = st.sidebar.color_picker("Color de la Campana", value="#47505e")
 
@@ -363,6 +345,9 @@ try:
         eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
 
     else:
+        # =================================================================
+        # NUEVO MOTOR DE CÁLCULO: CICLO REGENERATIVO Y BALANCES DE MASA
+        # =================================================================
         h_cond_out = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
         s_cond_out = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
         v_cond = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
@@ -371,34 +356,6 @@ try:
         h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
         s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
 
-        if tiene_recal:
-            h_rec_s = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-            h_rec_sal = h_in_turb - eta_t * (h_in_turb - h_rec_s)
-            s_rec_sal = CP.PropsSI('S', 'P', P_recal_Pa, 'H', h_rec_sal, fluido)
-            T_rec_sal = get_T_safe(P_recal_Pa, h_rec_sal)
-
-            h_rec_in2 = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-            s_rec_in2 = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
-
-            h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_rec_in2, fluido)
-            h_out_turb = h_rec_in2 - eta_t * (h_rec_in2 - h_out_s)
-            w_t = (h_in_turb - h_rec_sal) + (h_rec_in2 - h_out_turb)
-            q_recal = h_rec_in2 - h_rec_sal
-            s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
-            T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
-        else:
-        # =================================================================
-        # NUEVO MOTOR DE CÁLCULO: CICLO REGENERATIVO Y BALANCES DE MASA
-        # =================================================================
-            h_cond_out = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
-        s_cond_out = CP.PropsSI('S', 'P', P_cond_Pa, 'Q', 0, fluido)
-        v_cond = 1 / CP.PropsSI('D', 'P', P_cond_Pa, 'Q', 0, fluido)
-        T_cond_out = CP.PropsSI('T', 'P', P_cond_Pa, 'Q', 0, fluido) - 273.15
-
-        h_in_turb = CP.PropsSI('H', 'P', P_cald_Pa, 'T', T_max_K, fluido)
-        s_in_turb = CP.PropsSI('S', 'P', P_cald_Pa, 'T', T_max_K, fluido)
-
-        # 1. Obtener estados de expansión y extracciones
         fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
         extracciones = []
         
@@ -422,7 +379,6 @@ try:
                 'y': 0.0
             })
 
-        # Recalentamiento
         q_recal = 0.0
         if tiene_recal:
             h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
@@ -436,13 +392,11 @@ try:
             s_out_ref = s_in_turb
             h_in_bp = h_in_turb
 
-        # Escape al condensador
         h_out_s = CP.PropsSI('H', 'P', P_cond_Pa, 'S', s_out_ref, fluido)
         h_out_turb = h_in_bp - eta_t * (h_in_bp - h_out_s)
         s_out_turb = CP.PropsSI('S', 'P', P_cond_Pa, 'H', h_out_turb, fluido)
         T_out_turb = get_T_safe(P_cond_Pa, h_out_turb)
 
-        # 2. Balances de Masa y Energía Secuenciales
         w_bombas_total = 0.0
 
         if len(extracciones) == 2 and "Cerrado" in extracciones[0]['tipo'] and "Abierto" in extracciones[1]['tipo']:
@@ -462,13 +416,11 @@ try:
             
             if "Bomba" in ext1['drenaje']:
                 y2 = (1 - y1) * (h_fw_out2 - h_fw_in2) / (ext2['h'] - h_fw_in2)
-                
                 w_bomba_dren = ext1['vf'] * (P_cald_Pa - ext1['P']) / eta_p
                 h_drain1_pumped = h_drain1 + w_bomba_dren
                 
                 h_in_cald = (1 - y1) * h_out_fwh1 + y1 * h_drain1_pumped
                 w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1 - y1) * w_bomba2 + y1 * w_bomba_dren
-                
             else: 
                 y2 = ((1 - y1) * h_fw_out2 - (1 - y1) * h_fw_in2 - y1 * (h_drain1 - h_fw_in2)) / (ext2['h'] - h_fw_in2)
                 h_in_cald = h_out_fwh1
@@ -480,7 +432,6 @@ try:
                 w_t += (1 - y1) * (h_rec_in2 - ext2['h'])
             else:
                 w_t += (1 - y1) * (ext1['h'] - ext2['h'])
-                
             w_t += (1 - y1 - y2) * (ext2['h'] - h_out_turb)
 
         else:
@@ -488,7 +439,6 @@ try:
             w_t = h_in_turb - h_out_turb 
             w_bombas_total = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
 
-        # 3. Resultados Finales
         q_in = (h_in_turb - h_in_cald) + q_recal
         w_neto = w_t - w_bombas_total
         W_dot_neto = (m_dot * w_neto) / 1e3
@@ -499,7 +449,6 @@ try:
         w_rev = q_in * (1.0 - (T0 / TH))
         eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
 
-        # --- VARIABLES PARA QUE LA TABLA NO FALLE ---
         h2 = h_in_cald
         s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
         T2 = get_T_safe(P_cald_Pa, h2)
@@ -595,7 +544,6 @@ try:
 
         fig = go.Figure()
 
-        # Campana de saturación
         fig.add_trace(go.Scatter(
             x=s_liq + s_vap[::-1],
             y=[t - 273.15 for t in T_campana] + [t - 273.15 for t in T_campana[::-1]],
@@ -611,7 +559,6 @@ try:
         T_sup = np.linspace(T_sat_cald + 0.5, T_max, 30)
         s_sup = [CP.PropsSI('S', 'P', P_cald_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_sup]
 
-        # Diagrama para Cogeneración
         if "Cogeneración" in tipo_planta:
             pt_cond_liq = (s_cond_out/1e3, T_cond_out)
             pt_b1 = (s_cond_out/1e3, T_cond_out + 20.0)
@@ -662,7 +609,6 @@ try:
                 dict(x=(pt_cond_liq[0] + pt_esc[0])/2, y=T_cond_out + 10, text=f"<b>{fmt_p(P_cond)}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
             ]
 
-        # Diagrama para Potencia Regenerativa con Trampas / Bombas
         else:
             fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
             pts_x, pts_y, pts_txt, pts_pos = [], [], [], []
@@ -762,7 +708,6 @@ try:
                     x_ext = [s_origen, s_sf]
                     y_ext = [t_sf, t_sf]
 
-                # Trazado visual de la extracción
                 fig.add_trace(go.Scatter(
                     x=x_ext, y=y_ext, mode='lines',
                     line=dict(color=color_ciclo, width=1.8, dash='solid'),
@@ -770,13 +715,11 @@ try:
                     hoverinfo='skip'
                 ))
 
-                # Si es calentador cerrado con trampa de vapor: trazo de estrangulamiento
                 if "Trampa" in f['drenaje']:
                     p_inferior = fwh_ord[idx+1]['presion']*1e3 if idx+1 < len(fwh_ord) else P_cond_Pa
                     t_inferior = CP.PropsSI('T', 'P', p_inferior, 'Q', 0, fluido) - 273.15
                     s_sf_inf = CP.PropsSI('S', 'P', p_inferior, 'Q', 0, fluido) / 1e3
                     
-                    # Línea discontinua que muestra el vapor flash y condensado cayendo en cascada
                     fig.add_trace(go.Scatter(
                         x=[s_sf, s_sf + 0.15],
                         y=[t_sf, t_inferior],
@@ -855,7 +798,7 @@ try:
         else:
             filas = [
                 {"Estado": "Salida Condensador (1)", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_cond_out:.1f}", "h [kJ/kg]": f"{h_cond_out/1e3:.2f}", "s [kJ/kg·K]": f"{s_cond_out/1e3:.4f}"},
-                {"Estado": "Salida Bomba Principal (2)", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T2:.1f}", "h [kJ/kg]": f"{h2/1e3:.2f}", "s [kJ/kg·K]": f"{s2/1e3:.4f}"},
+                {"Estado": "Entrada de Agua a Caldera", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T2:.1f}", "h [kJ/kg]": f"{h2/1e3:.2f}", "s [kJ/kg·K]": f"{s2/1e3:.4f}"},
                 {"Estado": "Entrada Turbina AP", "P [kPa]": f"{P_cald:.1f}", "T [°C]": f"{T_max:.1f}", "h [kJ/kg]": f"{h_in_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_in_turb/1e3:.4f}"},
                 {"Estado": "Escape Turbina / Condensador", "P [kPa]": f"{P_cond:.1f}", "T [°C]": f"{T_out_turb:.1f}", "h [kJ/kg]": f"{h_out_turb/1e3:.2f}", "s [kJ/kg·K]": f"{s_out_turb/1e3:.4f}"}
             ]
