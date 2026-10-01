@@ -3,9 +3,6 @@ import CoolProp.CoolProp as CP
 import plotly.graph_objects as go
 import numpy as np
 import json
-from PIL import Image
-from google import genai
-from google.genai import types
 
 # ==========================================
 # CONFIGURACIÓN GENERAL Y ESTILO INDUSTRIAL
@@ -90,10 +87,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-try:
-    client = genai.Client(api_key=st.secrets["API_KEY"])
-except Exception:
-    client = None
 
 # ==========================================
 # VARIABLES POR DEFECTO
@@ -138,56 +131,6 @@ tipo_planta = st.sidebar.selectbox(
     index=0 if "Potencia" in st.session_state["tipo_planta"] else 1
 )
 st.session_state["tipo_planta"] = tipo_planta
-
-metodo = st.sidebar.radio("Modo de ingreso:", ["✍️ Manual", "📷 Cargar Imagen / Enunciado"], horizontal=True)
-
-if metodo == "📷 Cargar Imagen / Enunciado":
-    archivo = st.sidebar.file_uploader("Subir diagrama o enunciado técnico", type=["png", "jpg", "jpeg", "webp"])
-    if archivo and client:
-        img = Image.open(archivo)
-        if st.sidebar.button("🔍 Extraer Datos y Procesar", type="primary", use_container_width=True):
-            with st.spinner("Digitalizando parámetros termodinámicos..."):
-                try:
-                    prompt = """
-                    Analiza la imagen del ciclo térmico. Devuelve ÚNICAMENTE un JSON con:
-                    {
-                      "tipo_planta": "Central de Potencia" o "Cogeneracion",
-                      "P_cald_kPa": float,
-                      "T_max_C": float,
-                      "P_cond_kPa": float,
-                      "m_dot_kgs": float,
-                      "tiene_recal": bool,
-                      "P_recal_kPa": float o null,
-                      "T_recal_C": float o null,
-                      "num_fwh": int,
-                      "P_proc_kPa": float o null,
-                      "frac_byp": float o null,
-                      "frac_turb_proc": float o null
-                    }
-                    Reglas: presiones en kPa (ej: 15 MPa = 15000, 7 MPa = 7000, 500 kPa = 500, 10 kPa = 10).
-                    """
-                    res = client.models.generate_content(
-                        model="gemini-flash-latest",
-                        contents=[img, prompt],
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
-                    )
-                    datos = json.loads(res.text)
-                    st.session_state["P_cald"] = float(datos.get("P_cald_kPa", st.session_state["P_cald"]))
-                    st.session_state["T_max"] = float(datos.get("T_max_C", st.session_state["T_max"]))
-                    st.session_state["P_cond"] = float(datos.get("P_cond_kPa", st.session_state["P_cond"]))
-                    st.session_state["m_dot"] = float(datos.get("m_dot_kgs", st.session_state["m_dot"]))
-                    st.session_state["tiene_recal"] = bool(datos.get("tiene_recal", False))
-                    if datos.get("P_recal_kPa"):
-                        st.session_state["P_recal"] = float(datos.get("P_recal_kPa"))
-                    if datos.get("T_recal_C"):
-                        st.session_state["T_recal"] = float(datos.get("T_recal_C"))
-                    if datos.get("P_proc_kPa"):
-                        st.session_state["P_proc"] = float(datos.get("P_proc_kPa"))
-                        st.session_state["tipo_planta"] = "Planta de Cogeneración (Calor y Potencia)"
-                    st.sidebar.success("¡Parámetros cargados!")
-                    st.rerun()
-                except Exception as e:
-                    st.sidebar.error(f"Error procesando imagen: {e}")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Fronteras Térmicas Principales:**")
