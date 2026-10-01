@@ -11,7 +11,7 @@ from google.genai import types
 # CONFIGURACIÓN GENERAL Y ESTILO INDUSTRIAL
 # ==========================================
 st.set_page_config(
-    page_title="TermoRankine Pro | UTP",
+    page_title="Thermodynamics Rankine | UTP",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded" 
@@ -82,7 +82,7 @@ st.markdown("""
 
 st.markdown("""
 <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 25px; margin-bottom: 25px; text-align: center;">
-    <h1 style="color: #ffffff; font-size: 2.8rem; font-weight: 800; margin: 0; padding-bottom: 5px; font-family: 'Segoe UI', sans-serif;">TermoRankine Pro</h1>
+    <h1 style="color: #ffffff; font-size: 2.8rem; font-weight: 800; margin: 0; padding-bottom: 5px; font-family: 'Segoe UI', sans-serif;">Thermodynamics Rankine</h1>
     <p style="color: #94a3b8; font-size: 1.1rem; margin: 0 0 15px 0;">Simulador térmico integral: ciclos de potencia regenerativos con trampas/bombas, cogeneración y diagramas T-s dinámicos.</p>
     <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
         <span style="color: #38bdf8; font-weight: 600; font-size: 1.1rem;">Desarrollado por:</span> <span style="color: #cbd5e1; font-size: 1.1rem;">Alberto Mendieta | Cédula: 6-728-80 | UTP Azuero</span>
