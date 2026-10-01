@@ -139,6 +139,26 @@ T_max = st.sidebar.number_input("Temperatura Entrada Turbina [°C]", value=float
 P_cond = st.sidebar.number_input("Presión Condensador [kPa]", value=float(st.session_state["P_cond"]), step=1.0)
 m_dot = st.sidebar.number_input("Flujo Másico Total (ṁ) [kg/s]", value=float(st.session_state["m_dot"]), step=1.0)
 
+# --- MÓDULO NUEVO: SOLUCIONADOR DE PROBLEMAS INVERSOS ---
+st.sidebar.markdown("---")
+modo_inverso = st.sidebar.checkbox("🔄 ¿Problema Inverso? (Hallar T_max por calidad)")
+if modo_inverso:
+    x_out_req = st.sidebar.slider("Calidad requerida a la salida (x)", 0.70, 1.00, 0.85, 0.01)
+    try:
+        # 1. Calculamos la entropía necesaria para tener esa calidad en el condensador
+        s_f = CP.PropsSI('S', 'P', P_cond * 1e3, 'Q', 0, 'Water')
+        s_g = CP.PropsSI('S', 'P', P_cond * 1e3, 'Q', 1, 'Water')
+        s_req = s_f + x_out_req * (s_g - s_f)
+        
+        # 2. El programa viaja "hacia atrás" y descubre qué temperatura genera esa entropía
+        T_max_calc = CP.PropsSI('T', 'P', P_cald * 1e3, 'S', s_req, 'Water') - 273.15
+        
+        # 3. Sobrescribimos la T_max con la respuesta exacta
+        T_max = T_max_calc
+        st.sidebar.success(f"🔥 T_max auto-calculada: **{T_max:.1f} °C**")
+    except Exception as e:
+        st.sidebar.error("Esas condiciones están fuera de la campana.")
+# ---------------------------------------------------------
 # ==========================================
 # PARÁMETROS ESPECÍFICOS SEGÚN PLANTA
 # ==========================================
@@ -381,10 +401,27 @@ try:
                 w_t += (1 - y1) * (ext1['h'] - ext2['h'])
             w_t += (1 - y1 - y2) * (ext2['h'] - h_out_turb)
 
+        elif len(extracciones) == 1 and "Abierto" in extracciones[0]['tipo']:
+            ext1 = extracciones[0]
+            P_ext = ext1['P']
+            w_bomba1 = v_cond * (P_ext - P_cond_Pa) / eta_p
+            h_fw_in = h_cond_out + w_bomba1
+            h_fwh_out = ext1['hf']
+            v_fwh = ext1['vf']
+            ext1['y'] = (h_fwh_out - h_fw_in) / (ext1['h'] - h_fw_in)
+            y = ext1['y']
+            w_bomba2 = v_fwh * (P_cald_Pa - P_ext) / eta_p
+            h_in_cald = h_fwh_out + w_bomba2
+            w_bombas_total = (1 - y) * w_bomba1 + (1.0) * w_bomba2
+            w_t = 1.0 * (h_in_turb - ext1['h']) + (1 - y) * (ext1['h'] - h_out_turb)
+            if tiene_recal:
+                q_recal = (1.0) * q_recal_especifico
         else:
-            h_in_cald = CP.PropsSI('H', 'P', P_cald_Pa, 'Q', 0, fluido) 
-            w_t = h_in_turb - h_out_turb 
+            # 1. Primero calculamos el trabajo de la bomba para el ciclo simple
             w_bombas_total = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
+            h_out_cond = CP.PropsSI('H', 'P', P_cond_Pa, 'Q', 0, fluido)
+            h_in_cald = h_out_cond + w_bombas_total
+            w_t = h_in_turb - h_out_turb
 
         q_in = (h_in_turb - h_in_cald) + q_recal
         w_neto = w_t - w_bombas_total
