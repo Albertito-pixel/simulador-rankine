@@ -361,7 +361,8 @@ try:
         
         for f in fwh_ord:
             P_ext = f['presion'] * 1e3
-            if tiene_recal and P_ext <= P_recal_Pa:
+            # CORRECCIÓN CLAVE 1: Signo '<' estrictamente, para extraer antes de recalentar
+            if tiene_recal and P_ext < P_recal_Pa: 
                 s_ref = CP.PropsSI('S', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
                 h_in_stage = CP.PropsSI('H', 'P', P_recal_Pa, 'T', T_recal_K, fluido)
             else:
@@ -412,19 +413,22 @@ try:
             w_bomba2 = ext2['vf'] * (P_cald_Pa - ext2['P']) / eta_p
             h_fw_in1 = h_fw_out2 + w_bomba2
             
-            y1 = (h_out_fwh1 - h_fw_in1) / (ext1['h'] - h_drain1)
-            
             if "Bomba" in ext1['drenaje']:
+                # CORRECCIÓN CLAVE 2: Fórmula exacta de Çengel considerando masa (1-y1) en el tubo
+                y1 = (h_out_fwh1 - h_fw_in1) / ((ext1['h'] - h_drain1) + (h_out_fwh1 - h_fw_in1))
                 y2 = (1 - y1) * (h_fw_out2 - h_fw_in2) / (ext2['h'] - h_fw_in2)
+                
                 w_bomba_dren = ext1['vf'] * (P_cald_Pa - ext1['P']) / eta_p
                 h_drain1_pumped = h_drain1 + w_bomba_dren
                 
                 h_in_cald = (1 - y1) * h_out_fwh1 + y1 * h_drain1_pumped
                 w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1 - y1) * w_bomba2 + y1 * w_bomba_dren
             else: 
-                y2 = ((1 - y1) * h_fw_out2 - (1 - y1) * h_fw_in2 - y1 * (h_drain1 - h_fw_in2)) / (ext2['h'] - h_fw_in2)
+                # Fórmula para trampa en cascada
+                y1 = (h_out_fwh1 - h_fw_in1) / (ext1['h'] - h_drain1)
+                y2 = (h_fw_out2 - (1 - y1) * h_fw_in2 - y1 * h_drain1) / (ext2['h'] - h_fw_in2)
                 h_in_cald = h_out_fwh1
-                w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1) * w_bomba2
+                w_bombas_total = (1 - y1 - y2) * w_bomba1 + (1.0) * w_bomba2
 
             w_t = 1.0 * (h_in_turb - ext1['h'])
             if tiene_recal:
