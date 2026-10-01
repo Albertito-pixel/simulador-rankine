@@ -511,10 +511,10 @@ try:
             eta_th = eps_u
             w_rev = q_in * (1.0 - (T0 / TH))
             eta_II = (w_neto / w_rev) * 100.0 if w_rev > 0 else 0.0
-        # --- VARIABLES PARA QUE LA TABLA DE ESTADOS EN LA INTERFAZ NO FALLE ---
-            h2 = h_in_cald
-            s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
-            T2 = get_T_safe(P_cald_Pa, h2)
+# --- VARIABLES PARA QUE LA TABLA NO FALLE ---
+        h2 = h_in_cald
+        s2 = CP.PropsSI('S', 'P', P_cald_Pa, 'H', h2, fluido)
+        T2 = get_T_safe(P_cald_Pa, h2)
 
     # ==========================================
     # GENERADOR DE MEMORIA ANALÍTICA
