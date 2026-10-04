@@ -400,6 +400,43 @@ try:
             else:
                 w_t += (1 - y1) * (ext1['h'] - ext2['h'])
             w_t += (1 - y1 - y2) * (ext2['h'] - h_out_turb)
+        elif (
+                len(extracciones) == 2
+                and "Abierto" in extracciones[0]["tipo"]
+                and "Abierto" in extracciones[1]["tipo"]
+            ):
+            ext1, ext2 = extracciones[0], extracciones[1]
+
+            # 1. Bomba 1: Desde condensador hasta P_ext2
+            w_bomba1 = v_cond * (ext2["P"] - P_cond_Pa) / eta_p
+            h_fw_in2 = h_cond_out + w_bomba1
+
+            # 2. Bomba 2: Desde P_ext2 hasta P_ext1
+            w_bomba2 = ext2["vf"] * (ext1["P"] - ext2["P"]) / eta_p
+            h_fw_in1 = ext2["hf"] + w_bomba2
+
+            # 3. Bomba 3: Desde P_ext1 hasta P_caldera
+            w_bomba3 = ext1["vf"] * (P_cald_Pa - ext1["P"]) / eta_p
+            h_in_cald = ext1["hf"] + w_bomba3
+
+            # Balances de materia y energía en los calentadores abiertos
+            y1 = (ext1["hf"] - h_fw_in1) / (ext1["h"] - h_fw_in1)
+            ext1["y"] = y1
+
+            y2 = ((1.0 - y1) * (ext2["hf"] - h_fw_in2)) / (ext2["h"] - h_fw_in2)
+            ext2["y"] = y2
+
+            # Trabajo total de las tres bombas
+            w_bombas_total = (
+                (1.0 - y1 - y2) * w_bomba1 + (1.0 - y1) * w_bomba2 + (1.0) * w_bomba3
+            )
+
+            # Trabajo de la turbina expandiéndose en 3 etapas
+            w_t = (
+                1.0 * (h_in_turb - ext1["h"])
+                + (1.0 - y1) * (ext1["h"] - ext2["h"])
+                + (1.0 - y1 - y2) * (ext2["h"] - h_out_turb)
+            )
 
         elif len(extracciones) == 1 and "Abierto" in extracciones[0]['tipo']:
             ext1 = extracciones[0]
