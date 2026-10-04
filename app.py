@@ -314,7 +314,7 @@ def dibujar_diagrama_planta(
 
   # 4. Tren inferior de condensado y calentadores
   # Bomba de condensado (Bomba 1)
-  b1 = patches.Circle((10.5, 1.2), 0.5, **box_style, zorder=3)
+  b1 = patches.Circle((10.5, 1.2), 0.5, facecolor="#f0f4f8", edgecolor="#334e68", linewidth=1.5, zorder=3)
   ax.add_patch(b1)
   ax.text(10.5, 1.2, 'B1', fontsize=8.5, fontweight='bold', **txt_kw)
 
@@ -347,7 +347,7 @@ def dibujar_diagrama_planta(
     ax.plot([5.5, 7.5], [0.7, 0.7], color='#0288d1', lw=1.2)  # nivel de agua
 
     # Bomba 2 (Alta Presión)
-    b2 = patches.Circle((3.2, 1.2), 0.5, **box_style, zorder=3)
+    b2 = patches.Circle((3.2, 1.2), 0.5, facecolor="#f0f4f8", edgecolor="#334e68", linewidth=1.5, zorder=3)
     ax.add_patch(b2)
     ax.text(3.2, 1.2, 'B2', fontsize=8.5, fontweight='bold', **txt_kw)
 
