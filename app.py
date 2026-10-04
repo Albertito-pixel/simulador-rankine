@@ -413,9 +413,15 @@ try:
             w_bomba2 = v_fwh * (P_cald_Pa - P_ext) / eta_p
             h_in_cald = h_fwh_out + w_bomba2
             w_bombas_total = (1 - y) * w_bomba1 + (1.0) * w_bomba2
-            w_t = 1.0 * (h_in_turb - ext1['h']) + (1 - y) * (ext1['h'] - h_out_turb)
             if tiene_recal:
-                q_recal = (1.0) * q_recal_especifico
+                # 1. Turbina de alta + Turbina de baja (recalentada con flujo restante)
+                w_t = 1.0 * (h_in_turb - ext1['h']) + (1 - y) * (h_in_bp - h_out_turb)
+                # 2. El recalentador solo recibe la masa que no fue extraída (1 - y)
+                q_recal = (1 - y) * q_recal_especifico
+            else:
+                # Ciclo regenerativo estándar sin recalentamiento
+                w_t = 1.0 * (h_in_turb - ext1['h']) + (1 - y) * (ext1['h'] - h_out_turb)
+                q_recal = 0.0
         else:
             # 1. Primero calculamos el trabajo de la bomba para el ciclo simple
             w_bombas_total = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
