@@ -90,7 +90,6 @@ st.markdown("""
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 
-
 def dibujar_diagrama_planta(
     p_cald_kpa,
     t_cald,
@@ -103,14 +102,13 @@ def dibujar_diagrama_planta(
     q_in_total=None,
     n_estados_dict=None,
 ):
-  fig, ax = plt.subplots(figsize=(13, 6.5), dpi=100)
-  ax.set_xlim(-1, 15)
-  ax.set_ylim(-1, 8)
+  fig, ax = plt.subplots(figsize=(14, 7), dpi=100)
+  ax.set_xlim(-1, 16)
+  ax.set_ylim(-1.5, 8.5)
   ax.axis('off')
 
-  # Estilos base
   box_style = dict(
-      boxstyle='round,pad=0.5,rounding_size=0.3',
+      boxstyle='round,pad=0.4,rounding_size=0.3',
       facecolor='#f0f4f8',
       edgecolor='#334e68',
       linewidth=1.5,
@@ -123,19 +121,19 @@ def dibujar_diagrama_planta(
     ax.scatter(
         [x],
         [y],
-        s=420,
+        s=380,
         facecolor='white',
         edgecolor='#102a43',
-        linewidth=1.5,
-        zorder=6,
+        linewidth=1.4,
+        zorder=7,
     )
     ax.text(
         x,
         y,
         str(num),
         fontweight='bold',
-        fontsize=9,
-        zorder=7,
+        fontsize=8.5,
+        zorder=8,
         ha='center',
         va='center',
     )
@@ -143,52 +141,50 @@ def dibujar_diagrama_planta(
       info = f'{p_txt}\n{t_txt}'.strip()
       ax.text(
           x,
-          y + 0.55,
+          y + 0.45,
           info,
-          fontsize=7.5,
+          fontsize=7.0,
           ha='center',
           va='bottom',
           color='#334e68',
-          fontweight='semibold',
+          fontweight='bold',
       )
 
   # 1. Caldera (Izquierda Arriba)
   caldera = patches.FancyBboxPatch(
-      (0.2, 4.5), 2.2, 2.2, **box_style, zorder=3
+      (0.2, 4.8), 2.2, 2.4, **box_style, zorder=3
   )
   ax.add_patch(caldera)
   ax.text(
       1.3,
-      5.9,
+      6.2,
       'Caldera\n(Generador)',
       fontsize=9.5,
       fontweight='bold',
       **txt_kw,
   )
-  # Serpentín esquemático
   sx = [0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7, 1.9, 2.1]
-  sy = [4.8, 5.2, 4.8, 5.2, 4.8, 5.2, 4.8, 5.2, 4.8]
+  sy = [5.1, 5.5, 5.1, 5.5, 5.1, 5.5, 5.1, 5.5, 5.1]
   ax.plot(sx, sy, color='#d32f2f', lw=1.8, zorder=4)
 
   # 2. Condensador (Derecha Arriba/Media)
-  cond = patches.FancyBboxPatch((11.8, 4.5), 2.2, 2.2, **box_style, zorder=3)
+  cond = patches.FancyBboxPatch((12.6, 4.8), 2.2, 2.4, **box_style, zorder=3)
   ax.add_patch(cond)
   ax.text(
-      12.9,
-      5.9,
+      13.7,
+      6.2,
       'Condensador',
       fontsize=9.5,
       fontweight='bold',
       **txt_kw,
   )
-  for cy in [4.8, 5.1, 5.4]:
-    ax.plot([12.1, 13.7], [cy, cy], color='#0288d1', lw=1.2, zorder=4)
+  for cy in [5.1, 5.4, 5.7]:
+    ax.plot([12.9, 14.5], [cy, cy], color='#0288d1', lw=1.2, zorder=4)
 
-  # 3. Turbinas (Trapecios expansivos)
+  # 3. Turbinas y Recalentador
   if tiene_recal:
-    # Turbina Alta Presión
     tap_poly = patches.Polygon(
-        [[3.6, 6.4], [5.6, 6.9], [5.6, 4.3], [3.6, 4.8]],
+        [[3.6, 6.7], [5.6, 7.2], [5.6, 4.6], [3.6, 5.1]],
         facecolor='#f0f4f8',
         edgecolor='#334e68',
         lw=1.5,
@@ -197,36 +193,34 @@ def dibujar_diagrama_planta(
     ax.add_patch(tap_poly)
     ax.text(
         4.6,
-        5.6,
+        5.9,
         'Turbina\nde Alta',
         fontsize=8.5,
         fontweight='bold',
         **txt_kw,
     )
 
-    # Recalentador
     recal = patches.FancyBboxPatch(
-        (6.5, 4.6), 1.8, 2.0, **box_style, zorder=3
+        (6.6, 4.9), 1.8, 2.2, **box_style, zorder=3
     )
     ax.add_patch(recal)
     ax.text(
-        7.4,
-        5.9,
+        7.5,
+        6.2,
         'Recalentador',
         fontsize=8.5,
         fontweight='bold',
         **txt_kw,
     )
     ax.plot(
-        [6.7, 6.9, 7.1, 7.4, 7.7, 7.9, 8.1],
-        [4.9, 5.3, 4.9, 5.3, 4.9, 5.3, 4.9],
+        [6.8, 7.0, 7.2, 7.5, 7.8, 8.0, 8.2],
+        [5.2, 5.6, 5.2, 5.6, 5.2, 5.6, 5.2],
         color='#d32f2f',
         lw=1.6,
     )
 
-    # Turbina Baja Presión
     tbp_poly = patches.Polygon(
-        [[9.2, 6.4], [11.2, 7.1], [11.2, 4.1], [9.2, 4.8]],
+        [[9.4, 6.7], [11.8, 7.4], [11.8, 4.4], [9.4, 5.1]],
         facecolor='#f0f4f8',
         edgecolor='#334e68',
         lw=1.5,
@@ -234,53 +228,61 @@ def dibujar_diagrama_planta(
     )
     ax.add_patch(tbp_poly)
     ax.text(
-        10.2,
-        5.6,
+        10.6,
+        5.9,
         'Turbina\nde Baja',
         fontsize=8.5,
         fontweight='bold',
         **txt_kw,
     )
 
-    # Tuberías de vapor vivo y recalentamiento
     ax.annotate(
         '',
-        xy=(3.6, 5.6),
-        xytext=(2.4, 5.6),
+        xy=(3.6, 5.9),
+        xytext=(2.4, 5.9),
         arrowprops=dict(arrowstyle='-|>', color='#b71c1c', lw=3.0),
     )
     etiqueta_estado(
-        3.0, 5.6, 5, f'{p_cald_kpa/1e3:.1f} MPa', f'{t_cald:.0f} °C'
+        3.0, 5.9, 5, f'{p_cald_kpa/1e3:.1f} MPa', f'{t_cald:.0f} °C'
     )
 
     ax.annotate(
         '',
-        xy=(6.5, 5.6),
-        xytext=(5.6, 5.6),
+        xy=(6.6, 5.9),
+        xytext=(5.6, 5.9),
         arrowprops=dict(arrowstyle='-|>', color='#b71c1c', lw=2.5),
     )
-    etiqueta_estado(6.05, 5.6, 6, f'{p_recal_kpa:.0f} kPa')
+    etiqueta_estado(
+        6.1,
+        5.9,
+        6,
+        f'{p_recal_kpa:.0f} kPa' if p_recal_kpa else '',
+    )
 
     ax.annotate(
         '',
-        xy=(9.2, 5.6),
-        xytext=(8.3, 5.6),
+        xy=(9.4, 5.9),
+        xytext=(8.4, 5.9),
         arrowprops=dict(arrowstyle='-|>', color='#b71c1c', lw=2.5),
     )
-    etiqueta_estado(8.75, 5.6, 7, f'{p_recal_kpa:.0f} kPa', f'{t_recal:.0f} °C')
+    etiqueta_estado(
+        8.9,
+        5.9,
+        7,
+        f'{p_recal_kpa:.0f} kPa' if p_recal_kpa else '',
+        f'{t_recal:.0f} °C' if t_recal else '',
+    )
 
-    # Escape al condensador
     ax.annotate(
         '',
-        xy=(11.8, 5.6),
-        xytext=(11.2, 5.6),
+        xy=(12.6, 5.9),
+        xytext=(11.8, 5.9),
         arrowprops=dict(arrowstyle='-|>', color='#0277bd', lw=2.5),
     )
-    etiqueta_estado(11.5, 5.6, 8, f'{p_cond_kpa:.0f} kPa')
+    etiqueta_estado(12.2, 5.9, 8, f'{p_cond_kpa:.0f} kPa')
   else:
-    # Turbina única
     t_poly = patches.Polygon(
-        [[4.5, 6.6], [8.5, 7.3], [8.5, 3.9], [4.5, 4.6]],
+        [[4.5, 6.9], [10.5, 7.6], [10.5, 4.2], [4.5, 4.9]],
         facecolor='#f0f4f8',
         edgecolor='#334e68',
         lw=1.5,
@@ -288,8 +290,8 @@ def dibujar_diagrama_planta(
     )
     ax.add_patch(t_poly)
     ax.text(
-        6.5,
-        5.6,
+        7.5,
+        5.9,
         'Turbina de Vapor',
         fontsize=10,
         fontweight='bold',
@@ -298,110 +300,159 @@ def dibujar_diagrama_planta(
 
     ax.annotate(
         '',
-        xy=(4.5, 5.6),
-        xytext=(2.4, 5.6),
+        xy=(4.5, 5.9),
+        xytext=(2.4, 5.9),
         arrowprops=dict(arrowstyle='-|>', color='#b71c1c', lw=3.0),
     )
-    etiqueta_estado(3.4, 5.6, 1, f'{p_cald_kpa/1e3:.1f} MPa', f'{t_cald:.0f} °C')
+    etiqueta_estado(
+        3.4, 5.9, 1, f'{p_cald_kpa/1e3:.1f} MPa', f'{t_cald:.0f} °C'
+    )
 
     ax.annotate(
         '',
-        xy=(11.8, 5.6),
-        xytext=(8.5, 5.6),
+        xy=(12.6, 5.9),
+        xytext=(10.5, 5.9),
         arrowprops=dict(arrowstyle='-|>', color='#0277bd', lw=2.5),
     )
-    etiqueta_estado(10.1, 5.6, 2, f'{p_cond_kpa:.0f} kPa')
+    etiqueta_estado(11.5, 5.9, 2, f'{p_cond_kpa:.0f} kPa')
 
-  # 4. Tren inferior de condensado y calentadores
-  # Bomba de condensado (Bomba 1)
-  b1 = patches.Circle((10.5, 1.2), 0.5, facecolor="#f0f4f8", edgecolor="#334e68", linewidth=1.5, zorder=3)
+  # 4. Bomba 1 de Condensado
+  b1 = patches.Circle(
+      (12.0, 1.2),
+      0.45,
+      facecolor='#f0f4f8',
+      edgecolor='#334e68',
+      linewidth=1.5,
+      zorder=4,
+  )
   ax.add_patch(b1)
-  ax.text(10.5, 1.2, 'B1', fontsize=8.5, fontweight='bold', **txt_kw)
+  ax.text(12.0, 1.2, 'B1', fontsize=8.5, fontweight='bold', **txt_kw)
 
-  # Retorno condensador -> Bomba 1
-  ax.plot([12.9, 12.9, 10.5], [4.5, 2.5, 2.5], color='#01579b', lw=2.5)
+  ax.plot([13.7, 13.7, 12.0], [4.8, 2.5, 2.5], color='#01579b', lw=2.2)
   ax.annotate(
       '',
-      xy=(10.5, 1.7),
-      xytext=(10.5, 2.5),
-      arrowprops=dict(arrowstyle='-|>', color='#01579b', lw=2.5),
+      xy=(12.0, 1.65),
+      xytext=(12.0, 2.5),
+      arrowprops=dict(arrowstyle='-|>', color='#01579b', lw=2.2),
   )
-  etiqueta_estado(12.0, 2.5, 'C_out', f'{p_cond_kpa:.0f} kPa')
 
-  # Calentador Abierto (si existe en las extracciones)
-  ext_open = [e for e in extracciones if 'Abierto' in e.get('tipo', '')]
-  if ext_open:
-    # Calentador abierto centrado abajo
-    fwh_open = patches.FancyBboxPatch(
-        (5.2, 0.4), 2.6, 1.6, **box_style, zorder=3
-    )
-    ax.add_patch(fwh_open)
-    ax.text(
-        6.5,
-        1.35,
-        'Calentador Abierto\n(Desaireador)',
-        fontsize=8.5,
-        fontweight='bold',
-        **txt_kw,
-    )
-    ax.plot([5.5, 7.5], [0.7, 0.7], color='#0288d1', lw=1.2)  # nivel de agua
+  # 5. Dibujo Dinámico de Calentadores
+  n_fwh = len(extracciones)
+  if n_fwh > 0:
+    # Ordenar de mayor a menor presión (el de mayor presión va más a la izquierda, cerca a la caldera)
+    exts_sorted = sorted(extracciones, key=lambda x: x.get('P', 0), reverse=True)
 
-    # Bomba 2 (Alta Presión)
-    b2 = patches.Circle((3.2, 1.2), 0.5, facecolor="#f0f4f8", edgecolor="#334e68", linewidth=1.5, zorder=3)
-    ax.add_patch(b2)
-    ax.text(3.2, 1.2, 'B2', fontsize=8.5, fontweight='bold', **txt_kw)
+    # Distribuir coordenadas X entre x=3.5 (cerca a caldera) y x=10.5 (cerca a B1)
+    xs = np.linspace(3.5, 10.2, n_fwh)
+    w_box = max(1.2, min(2.0, 6.0 / n_fwh))
 
-    # Conexiones B1 -> FWH Abierto -> B2 -> Caldera
+    # Tubería principal de agua de alimentación desde B1 hacia Caldera
+    ax.plot([11.55, 1.3, 1.3], [1.2, 1.2, 4.8], color='#01579b', lw=2.5, zorder=2)
     ax.annotate(
         '',
-        xy=(7.8, 1.2),
-        xytext=(10.0, 1.2),
+        xy=(1.3, 4.8),
+        xytext=(1.3, 3.8),
         arrowprops=dict(arrowstyle='-|>', color='#01579b', lw=2.5),
     )
-    etiqueta_estado(8.9, 1.2, 'B1_out')
 
-    ax.annotate(
-        '',
-        xy=(3.7, 1.2),
-        xytext=(5.2, 1.2),
-        arrowprops=dict(arrowstyle='-|>', color='#01579b', lw=2.5),
-    )
-    etiqueta_estado(4.4, 1.2, 'DA_out')
+    for i, ext in enumerate(exts_sorted):
+      xc = xs[i]
+      tipo = ext.get('tipo', 'Cerrado')
+      p_kpa = ext.get('P', 0)
+      y_val = ext.get('y', 0.0)
+      es_abierto = 'Abierto' in tipo
 
-    # B2 hacia Caldera
-    ax.plot([2.7, 1.3, 1.3], [1.2, 1.2, 4.5], color='#01579b', lw=2.5)
-    ax.annotate(
-        '',
-        xy=(1.3, 4.5),
-        xytext=(1.3, 3.5),
-        arrowprops=dict(arrowstyle='-|>', color='#01579b', lw=2.5),
-    )
-    etiqueta_estado(1.3, 2.8, 'FW', f'{p_cald_kpa/1e3:.1f} MPa')
+      # Caja del Calentador
+      color_fwh = '#e3f2fd' if es_abierto else '#f5f5f5'
+      h_box = 1.6 if es_abierto else 1.4
+      y_box = 0.4 if es_abierto else 0.5
 
-    # Línea de extracción de vapor desde la turbina hacia el Calentador Abierto
-    p_fwh_kpa = ext_open[0]['P'] / 1e3
-    y_val = ext_open[0].get('y', 0.0)
-    ax.plot([5.0, 5.0, 6.5], [4.5, 2.9, 2.9], color='#e65100', ls='--', lw=1.8)
-    ax.annotate(
-        '',
-        xy=(6.5, 2.0),
-        xytext=(6.5, 2.9),
-        arrowprops=dict(arrowstyle='-|>', color='#e65100', ls='--', lw=1.8),
-    )
-    etiqueta_estado(5.0, 3.7, 'Ext', f'{p_fwh_kpa:.0f} kPa', f'y={y_val:.4f}')
+      fwh_patch = patches.FancyBboxPatch(
+          (xc - w_box / 2, y_box),
+          w_box,
+          h_box,
+          boxstyle='round,pad=0.2,rounding_size=0.2',
+          facecolor=color_fwh,
+          edgecolor='#0d47a1' if es_abierto else '#455a64',
+          lw=1.5,
+          zorder=3,
+      )
+      ax.add_patch(fwh_patch)
+
+      nombre_fwh = (
+          f'FWH {i+1}\n(Abierto)' if es_abierto else f'FWH {i+1}\n(Cerrado)'
+      )
+      ax.text(
+          xc,
+          y_box + h_box / 2,
+          nombre_fwh,
+          fontsize=7.5,
+          fontweight='bold',
+          **txt_kw,
+      )
+
+      # Línea de extracción desde arriba (Turbina)
+      x_top = (
+          min(11.0, max(4.0, xc + 0.5))
+          if tiene_recal
+          else min(9.5, max(5.0, xc))
+      )
+      ax.plot(
+          [x_top, xc, xc],
+          [4.5, 3.2, y_box + h_box],
+          color='#e65100',
+          ls='--',
+          lw=1.6,
+          zorder=3,
+      )
+      ax.annotate(
+          '',
+          xy=(xc, y_box + h_box),
+          xytext=(xc, y_box + h_box + 0.3),
+          arrowprops=dict(arrowstyle='-|>', color='#e65100', ls='--', lw=1.6),
+      )
+
+      # Etiqueta de la extracción
+      etiqueta_estado(
+          xc,
+          3.2,
+          f'y{i+1}',
+          f'{p_kpa:.0f} kPa',
+          f'y={y_val:.3f}' if y_val else '',
+      )
+
+      # Si es abierto, agregar su bomba de salida
+      if es_abierto:
+        b_da = patches.Circle(
+            (xc - w_box / 2 - 0.5, 1.2),
+            0.35,
+            facecolor='#f0f4f8',
+            edgecolor='#334e68',
+            linewidth=1.3,
+            zorder=4,
+        )
+        ax.add_patch(b_da)
+        ax.text(
+            xc - w_box / 2 - 0.5,
+            1.2,
+            f'B{i+2}',
+            fontsize=7,
+            fontweight='bold',
+            **txt_kw,
+        )
   else:
-    # Sin calentadores abiertos: Línea directa B1 -> Caldera
-    ax.plot([10.0, 1.3, 1.3], [1.2, 1.2, 4.5], color='#01579b', lw=2.5)
+    # Sin calentadores: línea directa B1 -> Caldera
+    ax.plot([11.55, 1.3, 1.3], [1.2, 1.2, 4.8], color='#01579b', lw=2.5)
     ax.annotate(
         '',
-        xy=(1.3, 4.5),
-        xytext=(1.3, 3.5),
+        xy=(1.3, 4.8),
+        xytext=(1.3, 3.8),
         arrowprops=dict(arrowstyle='-|>', color='#01579b', lw=2.5),
     )
-    etiqueta_estado(5.5, 1.2, 'FW', f'{p_cald_kpa/1e3:.1f} MPa')
 
   plt.tight_layout()
   return fig
+
 
 # ==========================================
 # VARIABLES POR DEFECTO
