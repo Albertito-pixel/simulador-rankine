@@ -400,6 +400,100 @@ try:
             else:
                 w_t += (1 - y1) * (ext1['h'] - ext2['h'])
             w_t += (1 - y1 - y2) * (ext2['h'] - h_out_turb)
+
+        elif len(extracciones) == 2 and "Cerrado" in extracciones[0]['tipo'] and "Cerrado" in extracciones[1]['tipo']:
+            ext1, ext2 = extracciones[0], extracciones[1]
+            
+            # Bomba del condensador impulsa el 100% del fluido a la caldera
+            w_bomba1 = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
+            h_fw_in2 = h_cond_out + w_bomba1
+            
+            # Salidas térmicas de los calentadores hacia la caldera
+            h_fwh_out2 = CP.PropsSI('H', 'P', P_cald_Pa, 'T', ext2['Tsat'] + 273.15, fluido)
+            h_fwh_out1 = CP.PropsSI('H', 'P', P_cald_Pa, 'T', ext1['Tsat'] + 273.15, fluido)
+            
+            # Balance Calentador 1 (alta presión)
+            y1 = (h_fwh_out1 - h_fwh_out2) / (ext1['h'] - ext1['hf'])
+            ext1['y'] = y1
+            
+            # Balance Calentador 2 (baja presión, recibe vapor ext2 + drenaje ext1)
+            y2 = ((h_fwh_out2 - h_fw_in2) - y1 * (ext1['hf'] - ext2['hf'])) / (ext2['h'] - ext2['hf'])
+            ext2['y'] = y2
+            
+            w_bombas_total = 1.0 * w_bomba1
+            h_in_cald = h_fwh_out1
+            
+            w_t = (1.0 * (h_in_turb - ext1['h']) + 
+                (1.0 - y1) * (ext1['h'] - ext2['h']) + 
+                (1.0 - y1 - y2) * (ext2['h'] - h_out_turb))
+        elif len(extracciones) == 3 and all("Abierto" in e['tipo'] for e in extracciones):
+            ext1, ext2, ext3 = extracciones[0], extracciones[1], extracciones[2]
+            
+            # Bomba 1: Condensador -> P_ext3
+            w_bomba1 = v_cond * (ext3['P'] - P_cond_Pa) / eta_p
+            h_fw_in3 = h_cond_out + w_bomba1
+            
+            # Bomba 2: P_ext3 -> P_ext2
+            w_bomba2 = ext3['vf'] * (ext2['P'] - ext3['P']) / eta_p
+            h_fw_in2 = ext3['hf'] + w_bomba2
+            
+            # Bomba 3: P_ext2 -> P_ext1
+            w_bomba3 = ext2['vf'] * (ext1['P'] - ext2['P']) / eta_p
+            h_fw_in1 = ext2['hf'] + w_bomba3
+            
+            # Bomba 4: P_ext1 -> P_caldera
+            w_bomba4 = ext1['vf'] * (P_cald_Pa - ext1['P']) / eta_p
+            h_in_cald = ext1['hf'] + w_bomba4
+            
+            # Balances de masa y energía (despeje de fracciones y1, y2, y3)
+            y1 = (ext1['hf'] - h_fw_in1) / (ext1['h'] - h_fw_in1)
+            ext1['y'] = y1
+            
+            y2 = ((1.0 - y1) * (ext2['hf'] - h_fw_in2)) / (ext2['h'] - h_fw_in2)
+            ext2['y'] = y2
+            
+            y3 = ((1.0 - y1 - y2) * (ext3['hf'] - h_fw_in3)) / (ext3['h'] - h_fw_in3)
+            ext3['y'] = y3
+            
+            # Trabajo total de las 4 bombas
+            w_bombas_total = ((1.0 - y1 - y2 - y3) * w_bomba1 + 
+                            (1.0 - y1 - y2) * w_bomba2 + 
+                            (1.0 - y1) * w_bomba3 + 
+                            1.0 * w_bomba4)
+            
+            # Expansión en la turbina (4 tramos)
+            w_t = (1.0 * (h_in_turb - ext1['h']) + 
+                (1.0 - y1) * (ext1['h'] - ext2['h']) + 
+                (1.0 - y1 - y2) * (ext2['h'] - ext3['h']) + 
+                (1.0 - y1 - y2 - y3) * (ext3['h'] - h_out_turb))
+
+        elif len(extracciones) == 1 and "Cerrado" in extracciones[0]['tipo']:
+            ext1 = extracciones[0]
+            P_ext = ext1['P']
+            
+            # 1. Bomba del condensador envía todo el flujo a P_caldera
+            w_bomba1 = v_cond * (P_cald_Pa - P_cond_Pa) / eta_p
+            h_fw_in = h_cond_out + w_bomba1
+            
+            # 2. Salida del calentador: agua líquida a Tsat(P_ext) a presión de caldera
+            h_fwh_out = CP.PropsSI('H', 'P', P_cald_Pa, 'T', ext1['Tsat'] + 273.15, fluido)
+            h_drain = ext1['hf']
+            
+            # 3. Balance de energía en el CCA: y * (h_ext - h_drain) = (1.0) * (h_fwh_out - h_fw_in)
+            ext1['y'] = (h_fwh_out - h_fw_in) / (ext1['h'] - h_drain)
+            y = ext1['y']
+            
+            # 4. Trabajo de bombas y turbina
+            w_bombas_total = 1.0 * w_bomba1
+            
+            if tiene_recal:
+                w_t = 1.0 * (h_in_turb - ext1['h']) + (1 - y) * (h_in_bp - h_out_turb)
+                q_recal = (1 - y) * q_recal_especifico
+            else:
+                w_t = 1.0 * (h_in_turb - ext1['h']) + (1 - y) * (ext1['h'] - h_out_turb)
+                q_recal = 0.0
+                
+            h_in_cald = h_fwh_out
         elif (
                 len(extracciones) == 2
                 and "Abierto" in extracciones[0]["tipo"]
