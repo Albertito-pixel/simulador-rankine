@@ -466,6 +466,104 @@ try:
                 (1.0 - y1) * (ext1['h'] - ext2['h']) + 
                 (1.0 - y1 - y2) * (ext2['h'] - ext3['h']) + 
                 (1.0 - y1 - y2 - y3) * (ext3['h'] - h_out_turb))
+            
+        elif any("Abierto" in ext['tipo'] for ext in extracciones) and any("Cerrado" in ext['tipo'] for ext in extracciones):
+            # 1. Ordenar extracciones de mayor presión a menor presión
+            exts_ordenadas = sorted(extracciones, key=lambda x: x['P'], reverse=True)
+            N = len(exts_ordenadas)
+            
+            # 2. Identificar el calentador abierto (desaireador)
+            idx_open = [i for i, ext in enumerate(exts_ordenadas) if "Abierto" in ext['tipo']][0]
+            ext_open = exts_ordenadas[idx_open]
+            P_open = ext_open['P']
+            
+            # 3. Bombas del ciclo:
+            # Bomba 1: Condensador hacia el desaireador a P_open
+            w_bomba1 = v_cond * (P_open - P_cond_Pa) / eta_p
+            h_fw_lp_in = h_cond_out + w_bomba1
+            
+            # Bomba 2: Desaireador hacia la caldera a P_caldera
+            w_bomba2 = ext_open['vf'] * (P_cald_Pa - P_open) / eta_p
+            h_fw_hp_in = ext_open['hf'] + w_bomba2
+            
+            # 4. Entalpías en el lado de los tubos para los cerrados
+            h_fwh_out = [0.0] * N
+            for i, ext in enumerate(exts_ordenadas):
+                if "Cerrado" in ext['tipo']:
+                    P_tubo = P_cald_Pa if i < idx_open else P_open
+                    h_fwh_out[i] = CP.PropsSI('H', 'P', P_tubo, 'T', ext['Tsat'] + 273.15, fluido)
+                else:
+                    h_fwh_out[i] = ext['hf']
+                    
+            # Estado que entra a la caldera
+            h_in_cald = h_fwh_out[0] if idx_open > 0 else h_fw_hp_in
+            
+            # 5. Balances térmicos para calcular las fracciones y_i
+            y = [0.0] * N
+            
+            # --- ZONA DE ALTA PRESIÓN (Cerrados entre el desaireador y la caldera) ---
+            drenaje_hp_h = 0.0
+            masa_drenaje_hp = 0.0
+            for i in range(idx_open):
+                h_in_tubo = h_fwh_out[i + 1] if (i + 1 < idx_open) else h_fw_hp_in
+                q_req = 1.0 * (h_fwh_out[i] - h_in_tubo)
+                
+                h_ext = exts_ordenadas[i]['h']
+                hf_act = exts_ordenadas[i]['hf']
+                calor_drenaje = masa_drenaje_hp * (drenaje_hp_h - hf_act) if masa_drenaje_hp > 0 else 0.0
+                
+                y[i] = (q_req - calor_drenaje) / (h_ext - hf_act)
+                exts_ordenadas[i]['y'] = y[i]
+                
+                masa_drenaje_hp += y[i]
+                drenaje_hp_h = hf_act
+                
+            # --- ZONA DE BAJA PRESIÓN (Cerrados entre el condensador y el desaireador) ---
+            drenaje_lp_h = 0.0
+            masa_drenaje_lp_rel = 0.0
+            f_lp = [0.0] * N
+            for i in range(idx_open + 1, N):
+                h_in_tubo = h_fwh_out[i + 1] if (i + 1 < N) else h_fw_lp_in
+                delta_h_tubo = (h_fwh_out[i] - h_in_tubo)
+                h_ext = exts_ordenadas[i]['h']
+                hf_act = exts_ordenadas[i]['hf']
+                
+                calor_dren = masa_drenaje_lp_rel * (drenaje_lp_h - hf_act) if masa_drenaje_lp_rel > 0 else 0.0
+                f_lp[i] = (delta_h_tubo - calor_dren) / (h_ext - hf_act)
+                masa_drenaje_lp_rel += f_lp[i]
+                drenaje_lp_h = hf_act
+                
+            h_salida_lp_hacia_abierto = h_fwh_out[idx_open + 1] if (idx_open + 1 < N) else h_fw_lp_in
+            
+            # Balance en el Calentador Abierto (Desaireador)
+            h_open = ext_open['h']
+            hf_open = ext_open['hf']
+            
+            y_open = (hf_open - masa_drenaje_hp * drenaje_hp_h - (1.0 - masa_drenaje_hp) * h_salida_lp_hacia_abierto) / (h_open - h_salida_lp_hacia_abierto)
+            y[idx_open] = y_open
+            exts_ordenadas[idx_open]['y'] = y_open
+            
+            # Fracciones definitivas de baja presión
+            m_lp = 1.0 - masa_drenaje_hp - y_open
+            for i in range(idx_open + 1, N):
+                y[i] = m_lp * f_lp[i]
+                exts_ordenadas[i]['y'] = y[i]
+                
+            # 6. Trabajo total de bombas
+            w_bombas_total = m_lp * w_bomba1 + 1.0 * w_bomba2
+            
+            # 7. Trabajo de la turbina por tramos
+            w_t = 0.0
+            m_turb = 1.0
+            h_ant = h_in_turb
+            
+            for i in range(N):
+                h_act = exts_ordenadas[i]['h']
+                w_t += m_turb * (h_ant - h_act)
+                m_turb -= y[i]
+                h_ant = h_act
+                
+            w_t += m_turb * (h_ant - h_out_turb)
 
         elif len(extracciones) == 1 and "Cerrado" in extracciones[0]['tipo']:
             ext1 = extracciones[0]
