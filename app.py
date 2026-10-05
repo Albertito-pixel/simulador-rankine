@@ -1336,49 +1336,67 @@ try:
         st.plotly_chart(fig, use_container_width=True)
 
     with tab_diagrama:
-            st.subheader("Esquema de Planta y Distribución de Flujos")
+        st.subheader("Esquema de Planta y Distribución de Flujos")
 
-            # Recolectar datos termodinámicos de forma 100% segura
-            estados_dict = {}
-            if 'pts_txt' in locals() and 'pts_x' in locals() and 'pts_y' in locals():
-                for txt, px, py in zip(pts_txt, pts_x, pts_y):
-                    try:
-                        num = int(txt)
-                        estados_dict[num] = {'T': float(py)}
-                    except Exception:
-                        pass
+        # 1. Extracción de estados calculados
+        estados_dict = {}
+        if 'pts_txt' in locals() and 'pts_y' in locals():
+            for txt, py in zip(pts_txt, pts_y):
+                try:
+                    estados_dict[int(txt)] = {'T': float(py)}
+                except Exception:
+                    pass
 
-            lista_estados = locals().get('estados', None)
-    if isinstance(lista_estados, (list, tuple)):
-        for i, est in enumerate(lista_estados):
-            if isinstance(est, dict):
-                p_v = est.get('P', est.get('p', 0))
-                t_v = est.get('T', est.get('t', 0))
-                p_c = p_v / 1e3 if p_v > 50000 else p_v
-                t_c = t_v - 273.15 if t_v > 200 else t_v
-                estados_dict[i + 1] = {'P': p_c, 'T': t_c}
+        lista_estados = locals().get('estados', locals().get('datos_estados', None))
+        if isinstance(lista_estados, (list, tuple)):
+            for i, est in enumerate(lista_estados):
+                if isinstance(est, dict):
+                    p_v = est.get('P', est.get('p', 0))
+                    t_v = est.get('T', est.get('t', 0))
+                    p_c = p_v / 1e3 if p_v > 50000 else p_v
+                    t_c = t_v - 273.15 if t_v > 200 else t_v
+                    if (i + 1) in estados_dict:
+                        estados_dict[i + 1]['P'] = p_c
+                        if 'T' not in estados_dict[i + 1]:
+                            estados_dict[i + 1]['T'] = t_c
+                    else:
+                        estados_dict[i + 1] = {'P': p_c, 'T': t_c}
 
-            m_dot_val = locals().get('m_dot', 1.0)
-            q_in_kw = locals().get('Q_dot_in', locals().get('q_in', 0) * m_dot_val if 'q_in' in locals() else None)
-            w_neto_kw = locals().get('W_dot_neto', locals().get('w_neto', 0) * m_dot_val if 'w_neto' in locals() else None)
-            q_cond_kw = locals().get('Q_dot_out', locals().get('q_out', 0) * m_dot_val if 'q_out' in locals() else None)
+        # 2. Detección segura de recalentamiento y presiones
+        tiene_recal_val = False
+        for var_name in ['tiene_recal', 'recalentamiento', 'hay_recal', 'tiene_recalentamiento', 'chk_recal']:
+            if var_name in locals() and locals()[var_name]:
+                tiene_recal_val = True
+                break
 
+        p_rec_val = locals().get('P_recal_Pa', locals().get('P_recal', locals().get('P_rec', None)))
+        t_rec_val = locals().get('T_recal', locals().get('T_rec', None))
+
+        # 3. Potencias y calores
+        m_dot_val = locals().get('m_dot', 1.0)
+        q_in_kw = locals().get('Q_dot_in', locals().get('q_in', 0) * m_dot_val if 'q_in' in locals() else None)
+        w_neto_kw = locals().get('W_dot_neto', locals().get('w_neto', 0) * m_dot_val if 'w_neto' in locals() else None)
+        q_cond_kw = locals().get('Q_dot_out', locals().get('q_out', 0) * m_dot_val if 'q_out' in locals() else None)
+
+        # 4. Generación y renderizado seguro del gráfico
+        try:
             fig_planta = dibujar_diagrama_planta(
-                p_cald_kpa=P_cald,
+                p_cald_kpa=locals().get('P_cald', 15000.0),
                 t_cald=locals().get('T_cald', locals().get('T_in_turb', 600.0)),
-                p_cond_kpa=P_cond,
+                p_cond_kpa=locals().get('P_cond', 10.0),
                 fwh_ord=locals().get('fwh_ord', []),
-                tiene_recal=locals().get('tiene_recal', False),
-                p_recal_kpa=locals().get('P_recal_Pa', None),
-                t_recal=locals().get('T_recal', None),
+                tiene_recal=tiene_recal_val,
+                p_recal_kpa=p_rec_val,
+                t_recal=t_rec_val,
                 estados_ciclo=estados_dict,
                 w_t_total=w_neto_kw,
                 q_in_total=q_in_kw,
                 q_out_cond=q_cond_kw
             )
-
             st.pyplot(fig_planta, use_container_width=True)
             plt.close(fig_planta)
+        except Exception as e:
+            st.error(f"Error al generar el diagrama de planta: {e}")
 
     with tab_estados:
         st.markdown(f"#### Estados Termodinámicos Fundamentales ({tipo_planta})")
