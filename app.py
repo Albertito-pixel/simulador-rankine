@@ -93,7 +93,6 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 def dibujar_diagrama_planta(
     p_cald_kpa,
     t_cald,
@@ -199,34 +198,72 @@ def dibujar_diagrama_planta(
           zorder=9,
       )
 
-  # =======================================================
-  # ASIGNACIÓN DE ESTADOS DINÁMICA BASADA EN ESTADOS_CICLO
-  # =======================================================
   n_fwh = len(fwh_ord)
-  max_st = max(estados_ciclo.keys()) if estados_ciclo else (15 if tiene_recal else 6)
 
-  # En ciclos Rankine regenerativos:
-  # 1: Salida Condensador, 2: Salida Bomba 1
-  st_cond_out = 1
-  st_b1_out = 2
-  st_esc_cond = max_st
+  # =======================================================
+  # ASIGNACIÓN SECUENCIAL AUTOMÁTICA SEGÚN RECORRIDO REAL
+  # =======================================================
+  # El agua fluye: Condensador -> Bomba 1 -> Calentadores (de menor a mayor P) -> Caldera
+  curr_st = 1
+  st_cond_out = curr_st  # 1: Salida condensador
+  curr_st += 1
+  st_b1_out = curr_st  # 2: Salida Bomba 1
 
-  # Entrada a turbina de alta y caldera
-  if tiene_recal and n_fwh > 0:
-    st_cald_in = 8 if 8 in estados_ciclo else (max_st - (n_fwh + 3))
-    st_turb_in = 9 if 9 in estados_ciclo else (st_cald_in + 1)
-    st_rec_in = 10 if 10 in estados_ciclo else (st_turb_in + 1)
-    st_rec_out = 11 if 11 in estados_ciclo else (st_rec_in + 1)
-  elif tiene_recal:
-    st_cald_in = 2
-    st_turb_in = 3
-    st_rec_in = 4
-    st_rec_out = 5
-  else:
-    st_cald_in = 2 + 2 * n_fwh if n_fwh > 0 else 2
-    st_turb_in = st_cald_in + 1
-    st_rec_in = None
-    st_rec_out = None
+  # Recorremos fwh_ord desde el de menor presión (derecha) al de mayor (izquierda)
+  fwh_cfg = []
+  for idx, f in enumerate(reversed(fwh_ord)):
+    es_ab = 'Abierto' in f.get('tipo', '')
+    tiene_tr = 'Trampa' in f.get('drenaje', '')
+    d = {
+        'orig_idx': n_fwh - 1 - idx,
+        'f': f,
+        'es_abierto': es_ab,
+        'tiene_trampa': tiene_tr,
+        'st_in_water': None,
+        'st_out_water': None,
+        'st_pump_out': None,
+        'st_drain_sat': None,
+        'st_ext': None,
+    }
+
+    if es_ab:
+      curr_st += 1
+      d['st_out_water'] = curr_st  # Salida del desaireador (líquido saturado)
+      curr_st += 1
+      d['st_pump_out'] = curr_st  # Salida de bomba intermedia
+    else:
+      if tiene_tr:
+        curr_st += 1
+        d['st_drain_sat'] = curr_st  # Drenaje líquido saturado con trampa
+      curr_st += 1
+      d['st_out_water'] = curr_st  # Agua calentada hacia el siguiente equipo
+
+    fwh_cfg.append(d)
+
+  # Restauramos el orden físico de izquierda a derecha (mayor P a menor P)
+  fwh_cfg.reverse()
+
+  st_cald_in = curr_st  # Entrada final a la caldera
+
+  # Vapor y expansión en turbina
+  curr_st += 1
+  st_turb_in = curr_st  # Vapor principal a la turbina
+
+  st_rec_in = None
+  st_rec_out = None
+  if tiene_recal:
+    curr_st += 1
+    st_rec_in = curr_st  # Salida AP hacia recalentador
+    curr_st += 1
+    st_rec_out = curr_st  # Salida recalentador hacia BP
+
+  # Extracciones (ordenadas de mayor presión a menor presión)
+  for d in fwh_cfg:
+    curr_st += 1
+    d['st_ext'] = curr_st
+
+  curr_st += 1
+  st_esc_cond = curr_st  # Escape final hacia el condensador
 
   # =======================================================
   # 1. CALDERA Y CONDENSADOR
@@ -345,10 +382,10 @@ def dibujar_diagrama_planta(
     etiqueta_estado(12.25, y_turb, st_esc_cond, p_cond_kpa, None, pos='top')
 
   # =======================================================
-  # 3. TREN DE AGUA INFERIOR (ESPACIADO VERTICAL MEJORADO)
+  # 3. TREN INFERIOR DE AGUA Y CALENTADORES
   # =======================================================
-  y_feed = 0.5  # Bajado a 0.5 para dar holgura a las etiquetas superiores
-  y_drain = -1.9  # Línea de drenajes bien abajo
+  y_feed = 0.5
+  y_drain = -1.9
 
   # Bomba 1
   b1 = patches.Circle(
@@ -362,7 +399,7 @@ def dibujar_diagrama_planta(
   ax.add_patch(b1)
   ax.text(12.3, y_feed, 'Bomba 1', fontsize=7.6, zorder=6, **txt_m)
 
-  # Tubo Condensador -> Bomba 1
+  # Condensador a Bomba 1
   ax.plot(
       [14.15, 14.15, 12.3, 12.3],
       [4.6, 2.3, 2.3, y_feed + 0.45],
@@ -378,7 +415,7 @@ def dibujar_diagrama_planta(
   )
   etiqueta_estado(13.2, 2.3, st_cond_out, p_cond_kpa, None, pos='top')
 
-  # Entrada a Caldera (Estado 8)
+  # Subida final a Caldera (un solo estado)
   ax.plot([1.45, 1.45], [y_feed, 4.6], color='#0369a1', lw=3.0, zorder=2)
   ax.annotate(
       '',
@@ -393,30 +430,26 @@ def dibujar_diagrama_planta(
     w_box = max(1.3, min(1.8, 5.0 / n_fwh))
     h_box = 1.4
 
-    # Tubo de agua continuo
+    # Línea horizontal de agua principal
     ax.plot([11.85, 1.45], [y_feed, y_feed], color='#0369a1', lw=3.0, zorder=2)
     etiqueta_estado(11.3, y_feed, st_b1_out, pos='top')
 
-    # Estado 6: Salida de agua del Calentador Cerrado 1 hacia la caldera
-    st_sal_fwh1 = 6 if 6 in estados_ciclo else (st_cald_in - 2)
-    etiqueta_estado(2.7, y_feed, st_sal_fwh1, pos='top')
-    
-    for i, f in enumerate(fwh_ord):
+    for i, d in enumerate(fwh_cfg):
       xc = xs[i]
+      f = d['f']
       p_raw = f.get('presion', f.get('P', 0))
       y_val = f.get('y', 0.0)
-      drenaje = f.get('drenaje', '')
-      es_abierto = 'Abierto' in f.get('tipo', 'Cerrado')
-      tiene_trampa = 'Trampa' in drenaje
+      es_ab = d['es_abierto']
+      tiene_tr = d['tiene_trampa']
 
-      # Caja del Calentador
+      # Caja del equipo
       fwh_box = patches.FancyBboxPatch(
           (xc - w_box / 2, y_feed - h_box / 2),
           w_box,
           h_box,
           boxstyle='round,pad=0.2,rounding_size=0.2',
-          facecolor='#e0f2fe' if es_abierto else '#f1f5f9',
-          edgecolor='#0284c7' if es_abierto else '#475569',
+          facecolor='#e0f2fe' if es_ab else '#f1f5f9',
+          edgecolor='#0284c7' if es_ab else '#475569',
           lw=1.6,
           zorder=3,
       )
@@ -425,23 +458,23 @@ def dibujar_diagrama_planta(
       ax.text(
           xc,
           y_feed - 0.15,
-          f"{'Abierto' if es_abierto else 'Cerrado'} {i+1}",
+          f"{'Abierto' if es_ab else 'Cerrado'} {i+1}",
           fontsize=7.6,
           **txt_m,
       )
 
-      # Flecha de agua entre calentadores
+      # Flechas de avance hacia la izquierda (hacia la Caldera)
       if i < n_fwh - 1:
         x_mitad = (xc + xs[i + 1]) / 2
         ax.annotate(
             '',
-            xy=(xc + w_box / 2 + 0.1, y_feed),
+            xy=(xc + w_box / 2 + 0.15, y_feed),
             xytext=(x_mitad, y_feed),
-            arrowprops=dict(arrowstyle='<-', color='#0369a1', lw=2.5),
+            arrowprops=dict(arrowstyle='-|>', color='#0369a1', lw=2.5),
         )
 
-      if es_abierto:
-        # Onditas de agua
+      # Calentador Abierto: salida de agua saturada y bomba intermedia
+      if es_ab:
         wx = np.linspace(xc - w_box / 2 + 0.15, xc + w_box / 2 - 0.15, 7)
         wy = [
             y_feed - 0.45 if k % 2 == 0 else y_feed - 0.38 for k in range(7)
@@ -460,21 +493,24 @@ def dibujar_diagrama_planta(
         ax.add_patch(b2)
         ax.text(b_pos_x, y_feed, 'Bomba 2', fontsize=7.4, zorder=6, **txt_m)
 
-        # Salida y entrada de la Bomba 2
-        st_sal_abierto = 4 if 4 in estados_ciclo else (st_cald_in - 2)
-        st_sal_b2 = 5 if 5 in estados_ciclo else (st_cald_in - 1)
         etiqueta_estado(
             xc - w_box / 2 - 0.15,
             y_feed,
-            st_sal_abierto,
+            d['st_out_water'],
             p_raw,
             None,
             pos='top',
         )
-        etiqueta_estado(b_pos_x - 0.65, y_feed, st_sal_b2, pos='top')
+        etiqueta_estado(b_pos_x - 0.65, y_feed, d['st_pump_out'], pos='top')
+      else:
+        # Calentador Cerrado: solo etiqueta a la salida si no es el último hacia caldera
+        if i > 0 and d['st_out_water']:
+          etiqueta_estado(
+              xc - w_box / 2 - 0.3, y_feed, d['st_out_water'], pos='top'
+          )
 
-      # Línea de drenaje en cascada con trampa
-      if tiene_trampa:
+      # Trampa de vapor
+      if tiene_tr:
         ax.plot(
             [xc, xc],
             [y_feed - h_box / 2, y_drain],
@@ -483,7 +519,6 @@ def dibujar_diagrama_planta(
             lw=1.8,
             zorder=2,
         )
-
         x_dest = xs[i + 1] if i + 1 < n_fwh else 13.6
         y_dest = y_feed - h_box / 2 if i + 1 < n_fwh else 4.6
         ax.plot(
@@ -495,7 +530,6 @@ def dibujar_diagrama_planta(
             zorder=2,
         )
 
-        # Símbolo de trampa de vapor
         x_trap = (xc + x_dest) / 2
         ax.plot(
             [x_trap - 0.2, x_trap + 0.2, x_trap - 0.2, x_trap + 0.2],
@@ -505,12 +539,9 @@ def dibujar_diagrama_planta(
             zorder=6,
         )
 
-        # Estados de condensado saturado y salida de trampa
-        # 3 es el drenaje de FWH3; 7 es el drenaje de FWH1
-        st_dr = 7 if i == 0 else (3 if i == n_fwh - 1 else 5)
-        etiqueta_estado(xc, y_drain + 0.45, st_dr, pos='top')
+        etiqueta_estado(xc, y_drain + 0.45, d['st_drain_sat'], pos='top')
 
-      # Extracción de vapor desde turbina
+      # Extracciones desde turbina
       x_top = (
           (4.8 if i == 0 else 10.2 + (i - 1) * 0.5)
           if tiene_recal
@@ -534,14 +565,7 @@ def dibujar_diagrama_planta(
           arrowprops=dict(arrowstyle='-|>', color='#64748b', ls='--', lw=1.8),
       )
 
-      # Mapeo dinámico de extracciones según los estados reales del ciclo
-      if tiene_recal and n_fwh == 3:
-            st_ext_lista = [12, 13, 10]
-            st_ext = st_ext_lista[i] if i < len(st_ext_lista) else (12 + i)
-      else:  
-            st_ext = st_turb_in + (3 if tiene_recal else 1) + i
-
-      etiqueta_estado(xc, 3.2, st_ext, p_raw, None, pos='top')   
+      etiqueta_estado(xc, 3.2, d['st_ext'], p_raw, None, pos='top')
 
       if y_val:
         ax.text(
