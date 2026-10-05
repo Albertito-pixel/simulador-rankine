@@ -397,6 +397,10 @@ def dibujar_diagrama_planta(
     ax.plot([11.85, 1.45], [y_feed, y_feed], color='#0369a1', lw=3.0, zorder=2)
     etiqueta_estado(11.3, y_feed, st_b1_out, pos='top')
 
+    # Estado 6: Salida de agua del Calentador Cerrado 1 hacia la caldera
+    st_sal_fwh1 = 6 if 6 in estados_ciclo else (st_cald_in - 2)
+    etiqueta_estado(2.7, y_feed, st_sal_fwh1, pos='top')
+    
     for i, f in enumerate(fwh_ord):
       xc = xs[i]
       p_raw = f.get('presion', f.get('P', 0))
@@ -530,14 +534,14 @@ def dibujar_diagrama_planta(
           arrowprops=dict(arrowstyle='-|>', color='#64748b', ls='--', lw=1.8),
       )
 
-      # Mapeo de estados de extracción (12, 13, ...)
-      st_ext = (
-          (12 + i)
-          if (tiene_recal and (12 + i) in estados_ciclo)
-          else (st_turb_in + 1 + i)
-      )
-      if st_ext <= st_esc_cond:
-        etiqueta_estado(xc, 3.2, st_ext, p_raw, None, pos='top')
+      # Mapeo dinámico de extracciones según los estados reales del ciclo
+      if tiene_recal and n_fwh == 3:
+            st_ext_lista = [12, 13, 10]
+            st_ext = st_ext_lista[i] if i < len(st_ext_lista) else (12 + i)
+      else:  
+            st_ext = st_turb_in + (3 if tiene_recal else 1) + i
+
+      etiqueta_estado(xc, 3.2, st_ext, p_raw, None, pos='top')   
 
       if y_val:
         ax.text(
