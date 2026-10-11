@@ -748,7 +748,21 @@ def get_T_safe(P_val, H_val):
 
 def fmt_p(p_kpa):
     return f"{p_kpa/1000:.2f} MPa" if p_kpa >= 1000 else f"{p_kpa:.0f} kPa"
-
+def generar_curva_expansion(p_in, p_out, h_in, s_in, eta, n_pts=25):
+    """Calcula la curva en el plano T-s que se abre hacia la derecha por irreversibilidad."""
+    p_steps = np.linspace(p_in, p_out, n_pts)
+    s_vals, t_vals = [], []
+    for p in p_steps:
+        try:
+            h_s = CP.PropsSI('H', 'P', p, 'S', s_in, fluido)
+            h_act = h_in - eta * (h_in - h_s)
+            s_act = CP.PropsSI('S', 'P', p, 'H', h_act, fluido) / 1e3
+            t_act = get_T_safe(p, h_act)
+            s_vals.append(s_act)
+            t_vals.append(t_act)
+        except Exception:
+            pass
+    return s_vals, t_vals
 try:
     if "Cogeneración" in tipo_planta:
         P_proc_Pa = P_proc * 1e3
@@ -1453,8 +1467,47 @@ try:
                 contador += 1
 
             pt_esc = (s_out_turb/1e3, T_out_turb)
-            x_main.extend([pt_esc[0], pt1[0]])
-            y_main.extend([pt_esc[1], pt1[1]])
+            # --- TRAZADO CON IRREVERSIBILIDAD (CURVA HACIA LA DERECHA) ---
+            p_alta_turb = P_recal_Pa if tiene_recal else P_cald_Pa
+            s_base_turb = s_out_ref if tiene_recal else s_in_turb
+            h_base_turb = h_in_bp if tiene_recal else h_in_turb
+
+            if eta_t < 0.999:
+                # 1. Línea vertical ideal isentrópica punteada (referencia s = cte)
+                t_ideal_esc = get_T_safe(P_cond_Pa, h_out_s)
+                fig.add_trace(go.Scatter(
+                    x=[s_base_turb / 1e3, s_base_turb / 1e3],
+                    y=[(h_base_turb - 273.15) if tiene_recal else T_max, t_ideal_esc],
+                    mode='lines',
+                    line=dict(color='#94a3b8', width=1.5, dash='dot'),
+                    name='Expansión Isentrópica (Ideal)',
+                    hoverinfo='skip'
+                ))
+
+                # 2. Curva real que avanza hacia la derecha por generación entrópica
+                s_curva, t_curva = generar_curva_expansion(
+                    p_in=p_alta_turb,
+                    p_out=P_cond_Pa,
+                    h_in=h_base_turb,
+                    s_in=s_base_turb,
+                    eta=eta_t,
+                    n_pts=25
+                )
+                fig.add_trace(go.Scatter(
+                    x=s_curva,
+                    y=t_curva,
+                    mode='lines',
+                    line=dict(color=color_ciclo, width=2.4),
+                    name=f'Expansión Real (η_t = {eta_t*100:.0f}%)',
+                    hoverinfo='skip'
+                ))
+            else:
+                x_main.append(pt_esc[0])
+                y_main.append(pt_esc[1])
+
+            # Conexión final al condensador (punto 1)
+            x_main.append(pt1[0])
+            y_main.append(pt1[1])
 
             pts_x.append(pt_esc[0])
             pts_y.append(pt_esc[1])
