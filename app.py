@@ -748,14 +748,23 @@ def get_T_safe(P_val, H_val):
 
 def fmt_p(p_kpa):
     return f"{p_kpa/1000:.2f} MPa" if p_kpa >= 1000 else f"{p_kpa:.0f} kPa"
-def generar_curva_expansion(p_in, p_out, h_in, s_in, eta, n_pts=25):
-    """Calcula la curva en el plano T-s que se abre hacia la derecha por irreversibilidad."""
+def generar_curva_proceso(p_in, p_out, h_in, s_in, eta, es_turbina=True, n_pts=20):
+    """
+    Genera puntos termodinámicos continuos entre dos presiones.
+    Si eta < 1.0, calcula la generación de entropía real (desviación a la derecha).
+    """
+    if abs(p_in - p_out) < 1.0:
+        return [s_in / 1e3], [get_T_safe(p_out, h_in)]
+    
     p_steps = np.linspace(p_in, p_out, n_pts)
     s_vals, t_vals = [], []
     for p in p_steps:
         try:
             h_s = CP.PropsSI('H', 'P', p, 'S', s_in, fluido)
-            h_act = h_in - eta * (h_in - h_s)
+            if es_turbina:
+                h_act = h_in - eta * (h_in - h_s)
+            else:
+                h_act = h_in + (h_s - h_in) / max(0.01, eta)
             s_act = CP.PropsSI('S', 'P', p, 'H', h_act, fluido) / 1e3
             t_act = get_T_safe(p, h_act)
             s_vals.append(s_act)
@@ -1467,43 +1476,107 @@ try:
                 contador += 1
 
             pt_esc = (s_out_turb/1e3, T_out_turb)
-            # --- TRAZADO CON IRREVERSIBILIDAD (CURVA HACIA LA DERECHA) ---
-            p_alta_turb = P_recal_Pa if tiene_recal else P_cald_Pa
-            s_base_turb = s_out_ref if tiene_recal else s_in_turb
-            h_base_turb = h_in_bp if tiene_recal else h_in_turb
-
-            if eta_t < 0.999:
-                # 1. Línea vertical ideal isentrópica punteada (referencia s = cte)
-                t_ideal_esc = get_T_safe(P_cond_Pa, h_out_s)
-                fig.add_trace(go.Scatter(
-                    x=[s_base_turb / 1e3, s_base_turb / 1e3],
-                    y=[(h_base_turb - 273.15) if tiene_recal else T_max, t_ideal_esc],
-                    mode='lines',
-                    line=dict(color='#94a3b8', width=1.5, dash='dot'),
-                    name='Expansión Isentrópica (Ideal)',
-                    hoverinfo='skip'
-                ))
-
-                # 2. Curva real que avanza hacia la derecha por generación entrópica
-                s_curva, t_curva = generar_curva_expansion(
-                    p_in=p_alta_turb,
-                    p_out=P_cond_Pa,
-                    h_in=h_base_turb,
-                    s_in=s_base_turb,
-                    eta=eta_t,
-                    n_pts=25
-                )
-                fig.add_trace(go.Scatter(
-                    x=s_curva,
-                    y=t_curva,
-                    mode='lines',
-                    line=dict(color=color_ciclo, width=2.4),
-                    name=f'Expansión Real (η_t = {eta_t*100:.0f}%)',
-                    hoverinfo='skip'
-                ))
+# =========================================================
+            # TRAZADO UNIVERSAL CONTINUO: TURBINAS, RECALENTAMIENTO Y ESCAPE
+            # =========================================================
+            # Definir etapas de expansión en orden decreciente de presión
+            # Maneja automáticamente: Simple, Regenerativo, y Con/Sin Recalentamiento
+            
+            if tiene_recal:
+                # --- TURBINA DE ALTA PRESIÓN (AP) ---
+                # Puntos ideales de referencia (isentrópica vertical)
+                h_rec_s_ideal = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
+                t_rec_s_ideal = get_T_safe(P_recal_Pa, h_rec_s_ideal)
+                
+                if eta_t < 0.999:
+                    fig.add_trace(go.Scatter(
+                        x=[s_in_turb/1e3, s_in_turb/1e3],
+                        y=[T_max, t_rec_s_ideal],
+                        mode='lines',
+                        line=dict(color='#94a3b8', width=1.5, dash='dash'),
+                        name='Expansión AP Ideal (s=cte)',
+                        hoverinfo='skip'
+                    ))
+                
+                # Curva real AP (desde P_caldera hasta P_recal)
+                s_ap, t_ap = generar_curva_proceso(P_cald_Pa, P_recal_Pa, h_in_turb, s_in_turb, eta_t, es_turbina=True)
+                x_main.extend(s_ap)
+                y_main.extend(t_ap)
+                
+                # Estado a la salida de AP
+                pt_rec_sal = (s_ap[-1], t_ap[-1])
+                pts_x.append(pt_rec_sal[0]); pts_y.append(pt_rec_sal[1])
+                pts_txt.append(str(contador)); pts_pos.append("middle right")
+                contador += 1
+                
+                # --- RECALENTADOR (A PRESIÓN CONSTANTE P_recal) ---
+                t_rec_iso = np.linspace(t_ap[-1], T_recal, 15)
+                s_rec_iso = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t + 273.15, fluido)/1e3 for t in t_rec_iso]
+                x_main.extend(s_rec_iso)
+                y_main.extend(t_rec_iso)
+                
+                # Estado a la salida del recalentador (entrada a BP)
+                pt_in_bp = (s_rec_in2/1e3, T_recal)
+                pts_x.append(pt_in_bp[0]); pts_y.append(pt_in_bp[1])
+                pts_txt.append(str(contador)); pts_pos.append("middle right")
+                contador += 1
+                
+                # Configurar origen de la Turbina de Baja Presión
+                p_inicio_bp = P_recal_Pa
+                h_inicio_bp = h_rec_in2
+                s_inicio_bp = s_rec_in2
             else:
-                x_main.append(pt_esc[0])
-                y_main.append(pt_esc[1])
+                # Sin recalentamiento: la expansión continúa directamente desde vapor vivo
+                p_inicio_bp = P_cald_Pa
+                h_inicio_bp = h_in_turb
+                s_inicio_bp = s_in_turb
+
+            # --- TURBINA DE BAJA PRESIÓN / EXPANSIÓN PRINCIPAL ---
+            # Si hay extracciones intermedias para FWH en esta zona
+            fwh_bp = [f for f in fwh_ord if (not tiene_recal or f['presion']*1e3 <= P_recal_Pa)]
+            
+            p_actual_exp = p_inicio_bp
+            h_actual_exp = h_inicio_bp
+            s_actual_exp = s_inicio_bp
+
+            for f in fwh_bp:
+                p_fwh_pa = f['presion'] * 1e3
+                if p_fwh_pa < p_actual_exp:
+                    s_tramo, t_tramo = generar_curva_proceso(p_actual_exp, p_fwh_pa, h_actual_exp, s_actual_exp, eta_t, es_turbina=True)
+                    x_main.extend(s_tramo)
+                    y_main.extend(t_tramo)
+                    
+                    # Actualizar estado para la siguiente etapa
+                    h_actual_exp = CP.PropsSI('H', 'P', p_fwh_pa, 'S', s_tramo[-1]*1e3, fluido)
+                    p_actual_exp = p_fwh_pa
+
+            # Tramo final hacia el condensador
+            s_final, t_final = generar_curva_proceso(p_actual_exp, P_cond_Pa, h_actual_exp, s_actual_exp, eta_t, es_turbina=True)
+            x_main.extend(s_final)
+            y_main.extend(t_final)
+
+            # Referencia isentrópica ideal final hacia el condensador
+            if eta_t < 0.999:
+                t_ideal_cond = get_T_safe(P_cond_Pa, h_out_s)
+                t_ref_top = T_recal if tiene_recal else T_max
+                s_ref_top = s_rec_in2/1e3 if tiene_recal else s_in_turb/1e3
+                fig.add_trace(go.Scatter(
+                    x=[s_ref_top, s_ref_top],
+                    y=[t_ref_top, t_ideal_cond],
+                    mode='lines',
+                    line=dict(color='#94a3b8', width=1.5, dash='dash'),
+                    name='Escape Ideal (s=cte)',
+                    hoverinfo='skip'
+                ))
+
+            # Punto de escape real al condensador
+            pt_esc = (s_out_turb/1e3, T_out_turb)
+            pts_x.append(pt_esc[0]); pts_y.append(pt_esc[1])
+            pts_txt.append(str(contador)); pts_pos.append("middle right")
+
+            # Cierre del ciclo: Condensación hacia el estado 1 (líquido saturado en condensador)
+            x_main.append(pt1[0])
+            y_main.append(pt1[1])
 
             # Conexión final al condensador (punto 1)
             x_main.append(pt1[0])
