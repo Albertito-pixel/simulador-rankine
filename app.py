@@ -748,6 +748,26 @@ def get_T_safe(P_val, H_val):
 
 def fmt_p(p_kpa):
     return f"{p_kpa/1000:.2f} MPa" if p_kpa >= 1000 else f"{p_kpa:.0f} kPa"
+def rotulo_estado(num, es_ideal=False, eta=1.0):
+    """Genera la etiqueta dinamica: num si es ideal, num+'s'/'a' si eta < 1.0."""
+    if eta >= 0.999:
+        return str(num)
+    return f"{num}s" if es_ideal else f"{num}a"
+
+def trazar_etapa_bomba(p_in, p_out, h_in, s_in, v_in, eta):
+    """Calcula trayectorias ideal y real para cualquier bomba del sistema."""
+    w_s = v_in * (p_out - p_in)
+    w_a = w_s / max(0.01, eta)
+    h_a = h_in + w_a
+    
+    s_s = s_in / 1e3
+    T_s = get_T_safe(p_out, h_in + w_s)
+    
+    offset_vis = (1.0 - eta) * 0.15 if eta < 0.999 else 0.0
+    s_a = s_s + offset_vis
+    T_a = get_T_safe(p_out, h_a)
+    
+    return (s_s, T_s), (s_a, T_a)
 def generar_curva_proceso(p_in, p_out, h_in, s_in, eta, es_turbina=True, n_pts=20):
     """
     Genera puntos termodinámicos continuos entre dos presiones.
@@ -1352,248 +1372,245 @@ try:
         else:
             fwh_ord = sorted(fwh_configuracion, key=lambda x: x['presion'], reverse=True)
             pts_x, pts_y, pts_txt, pts_pos = [], [], [], []
-            contador = 1
+        x_main, y_main = [], []
+        contador = 1
 
-            pt1 = (s_cond_out/1e3, T_cond_out)
-            pt2 = (s_cond_out/1e3, T_cond_out + 22.0)
-            pts_x.extend([pt1[0], pt2[0]])
-            pts_y.extend([pt1[1], pt2[1]])
-            pts_txt.extend([str(contador), str(contador+1)])
-            pts_pos.extend(["bottom left", "top left"])
-            contador += 2
+        # ---------------------------------------------------------
+        # A. CONDENSADOR Y TREN DE BOMBAS / CALENTADORES
+        # ---------------------------------------------------------
+        pt1 = (s_cond_out / 1e3, T_cond_out)
+        pts_x.append(pt1[0]); pts_y.append(pt1[1])
+        pts_txt.append(str(contador)); pts_pos.append("bottom left")
+        x_main.append(pt1[0]); y_main.append(pt1[1])
+        contador += 1
 
-            pts_liq = [pt1, pt2]
-            fwh_inv = list(reversed(fwh_ord))
+        # Presión destino de la primera bomba (a P_cald o al primer calentador abierto)
+        p_dest_b1 = P_cald_Pa
+        for f in reversed(fwh_ord):
+            if "Abierto" in f.get('tipo', ''):
+                p_dest_b1 = f['presion'] * 1e3
+                break
 
-            for f in fwh_inv:
-                p_pa = f['presion'] * 1e3
-                t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
-                s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
+        pt_b1_s, pt_b1_a = trazar_etapa_bomba(P_cond_Pa, p_dest_b1, h_cond_out, s_cond_out, v_cond, eta_p)
 
-                t_tr = np.linspace(pts_liq[-1][1], t_sf, 12)
-                s_tr = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_tr]
-                for sx, ty in zip(s_tr, t_tr):
-                    pts_liq.append((sx, ty))
+        if eta_p < 0.999:
+            # Trazo ideal vertical punteado 1 -> 2s
+            fig.add_trace(go.Scatter(
+                x=[pt1[0], pt_b1_s[0]], y=[pt1[1], pt_b1_s[1]],
+                mode='lines', line=dict(color='#94a3b8', width=1.5, dash='dot'),
+                name='Bomba Isentrópica', hoverinfo='skip'
+            ))
+            pts_x.append(pt_b1_s[0]); pts_y.append(pt_b1_s[1])
+            pts_txt.append(rotulo_estado(contador, es_ideal=True, eta=eta_p))
+            pts_pos.append("middle left")
+            
+            # Estado real 2a en el contorno continuo
+            pts_x.append(pt_b1_a[0]); pts_y.append(pt_b1_a[1])
+            pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_p))
+            pts_pos.append("top right")
+            x_main.append(pt_b1_a[0]); y_main.append(pt_b1_a[1])
+        else:
+            pts_x.append(pt_b1_s[0]); pts_y.append(pt_b1_s[1])
+            pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_p))
+            pts_pos.append("top left")
+            x_main.append(pt_b1_s[0]); y_main.append(pt_b1_s[1])
 
-                pt_f = (s_sf, t_sf)
-                pt_b = (s_sf, t_sf + 16.0)
-                pts_liq.extend([pt_f, pt_b])
+        contador += 1
 
-                pts_x.extend([pt_f[0], pt_b[0]])
-                pts_y.extend([pt_f[1], pt_b[1]])
-                pts_txt.extend([str(contador), str(contador+1)])
-                pts_pos.extend(["bottom left", "top left"])
-                contador += 2
+        # Recorrido de calentadores hacia la caldera
+        fwh_inv = list(reversed(fwh_ord))
+        for f in fwh_inv:
+            p_pa = f['presion'] * 1e3
+            t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
+            s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
 
-            t_cald = np.linspace(pts_liq[-1][1], T_sat_cald, 18)
-            s_cald = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_cald]
-            for sx, ty in zip(s_cald, t_cald):
-                pts_liq.append((sx, ty))
+            t_tr = np.linspace(y_main[-1], t_sf, 10)
+            s_tr = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_tr]
+            for sx, ty in zip(s_tr, t_tr):
+                x_main.append(sx); y_main.append(ty)
 
-            pt_in_t = (s_in_turb/1e3, T_max)
-            pts_cald = [(s_f_cald, T_sat_cald), (s_g_cald, T_sat_cald)] + list(zip(s_sup, T_sup))
-
-            pts_x.append(pt_in_t[0])
-            pts_y.append(pt_in_t[1])
-            pts_txt.append(str(contador))
-            pts_pos.append("middle right")
+            pt_f = (s_sf, t_sf)
+            pts_x.append(pt_f[0]); pts_y.append(pt_f[1])
+            pts_txt.append(str(contador)); pts_pos.append("bottom left")
+            x_main.append(pt_f[0]); y_main.append(pt_f[1])
             contador += 1
 
-            x_main = [p[0] for p in pts_liq] + [p[0] for p in pts_cald]
-            y_main = [p[1] for p in pts_liq] + [p[1] for p in pts_cald]
+            if "Abierto" in f.get('tipo', ''):
+                v_f_loc = 1 / CP.PropsSI('D', 'P', p_pa, 'Q', 0, fluido)
+                h_f_loc = CP.PropsSI('H', 'P', p_pa, 'Q', 0, fluido)
+                s_f_loc = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido)
+                pt_b_s, pt_b_a = trazar_etapa_bomba(p_pa, P_cald_Pa, h_f_loc, s_f_loc, v_f_loc, eta_p)
+                
+                if eta_p < 0.999:
+                    fig.add_trace(go.Scatter(
+                        x=[pt_f[0], pt_b_s[0]], y=[pt_f[1], pt_b_s[1]],
+                        mode='lines', line=dict(color='#94a3b8', width=1.5, dash='dot'),
+                        hoverinfo='skip'
+                    ))
+                    pts_x.append(pt_b_s[0]); pts_y.append(pt_b_s[1])
+                    pts_txt.append(rotulo_estado(contador, es_ideal=True, eta=eta_p))
+                    pts_pos.append("middle left")
 
-            if tiene_recal:
-                h_rec_iso = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-                t_rec_sal_val = get_T_safe(P_recal_Pa, h_rec_iso)
-                pt_rec_s = (s_in_turb/1e3, t_rec_sal_val)
-                x_main.append(pt_rec_s[0])
-                y_main.append(pt_rec_s[1])
-                pts_x.append(pt_rec_s[0])
-                pts_y.append(pt_rec_s[1])
-                pts_txt.append(str(contador))
-                pts_pos.append("middle right")
-                contador += 1
-
-                T_rec_c = np.linspace(t_rec_sal_val + 0.5, T_recal, 15)
-                s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_rec_c]
-                for sx, ty in zip(s_rec_c, T_rec_c):
-                    x_main.append(sx)
-                    y_main.append(ty)
-
-                pt_in_bp = (s_rec_in2/1e3, T_recal)
-                pts_x.append(pt_in_bp[0])
-                pts_y.append(pt_in_bp[1])
-                pts_txt.append(str(contador))
-                pts_pos.append("middle right")
-                contador += 1
-
-            for idx, f in enumerate(fwh_ord):
-                p_pa = f['presion'] * 1e3
-                t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
-                s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
-                s_sg = CP.PropsSI('S', 'P', p_pa, 'Q', 1, fluido) / 1e3
-                h_g = CP.PropsSI('H', 'P', p_pa, 'Q', 1, fluido)
-
-                s_origen = (s_in_turb/1e3) if (tiene_recal and p_pa >= P_recal_Pa) else (s_rec_in2/1e3 if tiene_recal else s_in_turb/1e3)
-                h_ext = CP.PropsSI('H', 'P', p_pa, 'S', s_origen * 1e3, fluido)
-                t_ext = get_T_safe(p_pa, h_ext)
-                pt_ext = (s_origen, t_ext)
-
-                if h_ext > h_g + 2000.0 and t_ext > t_sf + 1.0:
-                    t_iso = np.linspace(t_ext, t_sf + 0.6, 8)
-                    s_iso = [CP.PropsSI('S', 'P', p_pa, 'T', t + 273.15, fluido)/1e3 for t in t_iso]
-                    x_ext = s_iso + [s_sg, s_sf]
-                    y_ext = list(t_iso) + [t_sf, t_sf]
+                    pts_x.append(pt_b_a[0]); pts_y.append(pt_b_a[1])
+                    pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_p))
+                    pts_pos.append("top right")
+                    x_main.append(pt_b_a[0]); y_main.append(pt_b_a[1])
                 else:
-                    x_ext = [s_origen, s_sf]
-                    y_ext = [t_sf, t_sf]
-
-                fig.add_trace(go.Scatter(
-                    x=x_ext, y=y_ext, mode='lines',
-                    line=dict(color=color_ciclo, width=1.8, dash='solid'),
-                    name=f'Extracción {fmt_p(p_pa/1000)}',
-                    hoverinfo='skip'
-                ))
-
-                if "Trampa" in f['drenaje']:
-                    p_inferior = fwh_ord[idx+1]['presion']*1e3 if idx+1 < len(fwh_ord) else P_cond_Pa
-                    t_inferior = CP.PropsSI('T', 'P', p_inferior, 'Q', 0, fluido) - 273.15
-                    s_sf_inf = CP.PropsSI('S', 'P', p_inferior, 'Q', 0, fluido) / 1e3
-                    
-                    fig.add_trace(go.Scatter(
-                        x=[s_sf, s_sf + 0.15],
-                        y=[t_sf, t_inferior],
-                        mode='lines',
-                        line=dict(color='#f59e0b', width=1.6, dash='dash'),
-                        name=f'Trampa #{idx+1} (h=cte)',
-                        hoverinfo='skip'
-                    ))
-
-                pts_x.append(pt_ext[0])
-                pts_y.append(pt_ext[1])
-                pts_txt.append(str(contador))
-                pts_pos.append("middle right")
+                    pts_x.append(pt_b_s[0]); pts_y.append(pt_b_s[1])
+                    pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_p))
+                    pts_pos.append("top left")
+                    x_main.append(pt_b_s[0]); y_main.append(pt_b_s[1])
                 contador += 1
 
-            pt_esc = (s_out_turb/1e3, T_out_turb)
-# =========================================================
-            # TRAZADO UNIVERSAL CONTINUO: TURBINAS, RECALENTAMIENTO Y ESCAPE
-            # =========================================================
-            # Definir etapas de expansión en orden decreciente de presión
-            # Maneja automáticamente: Simple, Regenerativo, y Con/Sin Recalentamiento
+        # ---------------------------------------------------------
+        # B. CALDERA (CALENTAMIENTO, EBULLICIÓN Y SOBRECALENTAMIENTO)
+        # ---------------------------------------------------------
+        t_cald = np.linspace(y_main[-1], T_sat_cald, 15)
+        s_cald = [CP.PropsSI('S', 'T', t + 273.15, 'Q', 0, fluido)/1e3 for t in t_cald]
+        for sx, ty in zip(s_cald, t_cald):
+            x_main.append(sx); y_main.append(ty)
+
+        x_main.extend([s_f_cald, s_g_cald] + list(s_sup))
+        y_main.extend([T_sat_cald, T_sat_cald] + list(T_sup))
+
+        pt_in_t = (s_in_turb / 1e3, T_max)
+        pts_x.append(pt_in_t[0]); pts_y.append(pt_in_t[1])
+        pts_txt.append(str(contador)); pts_pos.append("middle right")
+        contador += 1
+
+        # ---------------------------------------------------------
+        # C. EXPANSIÓN EN TURBINA(S) Y RECALENTAMIENTO DINÁMICO
+        # ---------------------------------------------------------
+        if tiene_recal:
+            h_rec_s_ideal = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
+            t_rec_s_ideal = get_T_safe(P_recal_Pa, h_rec_s_ideal)
             
-            if tiene_recal:
-                # --- TURBINA DE ALTA PRESIÓN (AP) ---
-                # Puntos ideales de referencia (isentrópica vertical)
-                h_rec_s_ideal = CP.PropsSI('H', 'P', P_recal_Pa, 'S', s_in_turb, fluido)
-                t_rec_s_ideal = get_T_safe(P_recal_Pa, h_rec_s_ideal)
-                
-                if eta_t < 0.999:
-                    fig.add_trace(go.Scatter(
-                        x=[s_in_turb/1e3, s_in_turb/1e3],
-                        y=[T_max, t_rec_s_ideal],
-                        mode='lines',
-                        line=dict(color='#94a3b8', width=1.5, dash='dash'),
-                        name='Expansión AP Ideal (s=cte)',
-                        hoverinfo='skip'
-                    ))
-                
-                # Curva real AP (desde P_caldera hasta P_recal)
-                s_ap, t_ap = generar_curva_proceso(P_cald_Pa, P_recal_Pa, h_in_turb, s_in_turb, eta_t, es_turbina=True)
-                x_main.extend(s_ap)
-                y_main.extend(t_ap)
-                
-                # Estado a la salida de AP
-                pt_rec_sal = (s_ap[-1], t_ap[-1])
-                pts_x.append(pt_rec_sal[0]); pts_y.append(pt_rec_sal[1])
-                pts_txt.append(str(contador)); pts_pos.append("middle right")
-                contador += 1
-                
-                # --- RECALENTADOR (A PRESIÓN CONSTANTE P_recal) ---
-                t_rec_iso = np.linspace(t_ap[-1], T_recal, 15)
-                s_rec_iso = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t + 273.15, fluido)/1e3 for t in t_rec_iso]
-                x_main.extend(s_rec_iso)
-                y_main.extend(t_rec_iso)
-                
-                # Estado a la salida del recalentador (entrada a BP)
-                pt_in_bp = (s_rec_in2/1e3, T_recal)
-                pts_x.append(pt_in_bp[0]); pts_y.append(pt_in_bp[1])
-                pts_txt.append(str(contador)); pts_pos.append("middle right")
-                contador += 1
-                
-                # Configurar origen de la Turbina de Baja Presión
-                p_inicio_bp = P_recal_Pa
-                h_inicio_bp = h_rec_in2
-                s_inicio_bp = s_rec_in2
-            else:
-                # Sin recalentamiento: la expansión continúa directamente desde vapor vivo
-                p_inicio_bp = P_cald_Pa
-                h_inicio_bp = h_in_turb
-                s_inicio_bp = s_in_turb
-
-            # --- TURBINA DE BAJA PRESIÓN / EXPANSIÓN PRINCIPAL ---
-            # Si hay extracciones intermedias para FWH en esta zona
-            fwh_bp = [f for f in fwh_ord if (not tiene_recal or f['presion']*1e3 <= P_recal_Pa)]
-            
-            p_actual_exp = p_inicio_bp
-            h_actual_exp = h_inicio_bp
-            s_actual_exp = s_inicio_bp
-
-            for f in fwh_bp:
-                p_fwh_pa = f['presion'] * 1e3
-                if p_fwh_pa < p_actual_exp:
-                    s_tramo, t_tramo = generar_curva_proceso(p_actual_exp, p_fwh_pa, h_actual_exp, s_actual_exp, eta_t, es_turbina=True)
-                    x_main.extend(s_tramo)
-                    y_main.extend(t_tramo)
-                    
-                    # Actualizar estado para la siguiente etapa
-                    h_actual_exp = CP.PropsSI('H', 'P', p_fwh_pa, 'S', s_tramo[-1]*1e3, fluido)
-                    p_actual_exp = p_fwh_pa
-
-            # Tramo final hacia el condensador
-            s_final, t_final = generar_curva_proceso(p_actual_exp, P_cond_Pa, h_actual_exp, s_actual_exp, eta_t, es_turbina=True)
-            x_main.extend(s_final)
-            y_main.extend(t_final)
-
-            # Referencia isentrópica ideal final hacia el condensador
             if eta_t < 0.999:
-                t_ideal_cond = get_T_safe(P_cond_Pa, h_out_s)
-                t_ref_top = T_recal if tiene_recal else T_max
-                s_ref_top = s_rec_in2/1e3 if tiene_recal else s_in_turb/1e3
                 fig.add_trace(go.Scatter(
-                    x=[s_ref_top, s_ref_top],
-                    y=[t_ref_top, t_ideal_cond],
-                    mode='lines',
-                    line=dict(color='#94a3b8', width=1.5, dash='dash'),
-                    name='Escape Ideal (s=cte)',
-                    hoverinfo='skip'
+                    x=[s_in_turb/1e3, s_in_turb/1e3], y=[T_max, t_rec_s_ideal],
+                    mode='lines', line=dict(color='#94a3b8', width=1.5, dash='dash'),
+                    name='Expansión AP Ideal', hoverinfo='skip'
                 ))
+                pts_x.append(s_in_turb/1e3); pts_y.append(t_rec_s_ideal)
+                pts_txt.append(rotulo_estado(contador, es_ideal=True, eta=eta_t))
+                pts_pos.append("middle left")
+                
+                s_ap, t_ap = generar_curva_proceso(P_cald_Pa, P_recal_Pa, h_in_turb, s_in_turb, eta_t, es_turbina=True)
+                x_main.extend(s_ap); y_main.extend(t_ap)
+                
+                pts_x.append(s_ap[-1]); pts_y.append(t_ap[-1])
+                pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_t))
+                pts_pos.append("middle right")
+            else:
+                x_main.append(s_in_turb/1e3); y_main.append(t_rec_s_ideal)
+                pts_x.append(s_in_turb/1e3); pts_y.append(t_rec_s_ideal)
+                pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_t))
+                pts_pos.append("middle right")
+            contador += 1
 
-            # Punto de escape real al condensador
-            pt_esc = (s_out_turb/1e3, T_out_turb)
-            pts_x.append(pt_esc[0]); pts_y.append(pt_esc[1])
+            T_rec_c = np.linspace(y_main[-1] + 0.5, T_recal, 15)
+            s_rec_c = [CP.PropsSI('S', 'P', P_recal_Pa, 'T', t + 273.15, fluido)/1e3 for t in T_rec_c]
+            x_main.extend(s_rec_c); y_main.extend(T_rec_c)
+
+            pt_in_bp = (s_rec_in2/1e3, T_recal)
+            pts_x.append(pt_in_bp[0]); pts_y.append(pt_in_bp[1])
             pts_txt.append(str(contador)); pts_pos.append("middle right")
+            contador += 1
 
-            # Cierre del ciclo: Condensación hacia el estado 1 (líquido saturado en condensador)
-            x_main.append(pt1[0])
-            y_main.append(pt1[1])
+            p_alta_turb = P_recal_Pa
+            s_base_turb = s_rec_in2
+            h_base_turb = h_rec_in2
+            t_base_turb = T_recal
+        else:
+            p_alta_turb = P_cald_Pa
+            s_base_turb = s_in_turb
+            h_base_turb = h_in_turb
+            t_base_turb = T_max
 
-            # Conexión final al condensador (punto 1)
-            x_main.append(pt1[0])
-            y_main.append(pt1[1])
+        # ---------------------------------------------------------
+        # D. LÍNEAS DE EXTRACCIÓN (FWHs)
+        # ---------------------------------------------------------
+        for idx, f in enumerate(fwh_ord):
+            p_pa = f['presion'] * 1e3
+            t_sf = CP.PropsSI('T', 'P', p_pa, 'Q', 0, fluido) - 273.15
+            s_sf = CP.PropsSI('S', 'P', p_pa, 'Q', 0, fluido) / 1e3
+            s_sg = CP.PropsSI('S', 'P', p_pa, 'Q', 1, fluido) / 1e3
+            h_g = CP.PropsSI('H', 'P', p_pa, 'Q', 1, fluido)
 
-            pts_x.append(pt_esc[0])
-            pts_y.append(pt_esc[1])
-            pts_txt.append(str(contador))
-            pts_pos.append("middle right")
+            s_origen = (s_in_turb/1e3) if (tiene_recal and p_pa >= P_recal_Pa) else (s_rec_in2/1e3 if tiene_recal else s_in_turb/1e3)
+            h_ext = CP.PropsSI('H', 'P', p_pa, 'S', s_origen * 1e3, fluido)
+            t_ext = get_T_safe(p_pa, h_ext)
+
+            if h_ext > h_g + 2000.0 and t_ext > t_sf + 1.0:
+                t_iso = np.linspace(t_ext, t_sf + 0.6, 8)
+                s_iso = [CP.PropsSI('S', 'P', p_pa, 'T', t + 273.15, fluido)/1e3 for t in t_iso]
+                x_ext = s_iso + [s_sg, s_sf]
+                y_ext = list(t_iso) + [t_sf, t_sf]
+            else:
+                x_ext = [s_origen, s_sf]
+                y_ext = [t_sf, t_sf]
 
             fig.add_trace(go.Scatter(
-                x=x_main, y=y_main, mode='lines',
-                line=dict(color=color_ciclo, width=2.4),
-                name='Ciclo Principal', hoverinfo='skip'
+                x=x_ext, y=y_ext, mode='lines',
+                line=dict(color=color_ciclo, width=1.6, dash='solid'),
+                name=f'Extracción {fmt_p(p_pa/1000)}', hoverinfo='skip'
             ))
 
+            pts_x.append(s_origen); pts_y.append(t_ext)
+            pts_txt.append(str(contador)); pts_pos.append("middle right")
+            contador += 1
+            if "Trampa" in f.get('drenaje', ''):
+                p_inferior = fwh_ord[idx+1]['presion']*1e3 if idx+1 < len(fwh_ord) else P_cond_Pa
+                t_inferior = CP.PropsSI('T', 'P', p_inferior, 'Q', 0, fluido) - 273.15
+                s_sf_inf = CP.PropsSI('S', 'P', p_inferior, 'Q', 0, fluido) / 1e3
+
+                fig.add_trace(go.Scatter(
+                    x=[s_sf, s_sf + 0.15],
+                    y=[t_sf, t_inferior],
+                    mode='lines',
+                    line=dict(color='#f59e0b', width=1.6, dash='dash'),
+                    name=f'Trampa #{idx+1} (h=cte)',
+                    hoverinfo='skip'
+                ))
+        # ---------------------------------------------------------
+        # E. EXPANSIÓN FINAL HACIA CONDENSADOR Y CIERRE
+        # ---------------------------------------------------------
+        if eta_t < 0.999:
+            t_ideal_esc = get_T_safe(P_cond_Pa, h_out_s)
             fig.add_trace(go.Scatter(
+                x=[s_base_turb / 1e3, s_base_turb / 1e3], y=[t_base_turb, t_ideal_esc],
+                mode='lines', line=dict(color='#94a3b8', width=1.5, dash='dash'),
+                name='Escape Ideal (s=cte)', hoverinfo='skip'
+            ))
+            pts_x.append(s_base_turb / 1e3); pts_y.append(t_ideal_esc)
+            pts_txt.append(rotulo_estado(contador, es_ideal=True, eta=eta_t))
+            pts_pos.append("bottom left")
+
+            s_curva, t_curva = generar_curva_proceso(p_alta_turb, P_cond_Pa, h_base_turb, s_base_turb, eta_t, es_turbina=True)
+            x_main.extend(s_curva); y_main.extend(t_curva)
+
+            pts_x.append(s_curva[-1]); pts_y.append(t_curva[-1])
+            pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_t))
+            pts_pos.append("bottom right")
+        else:
+            pt_esc = (s_out_turb / 1e3, T_out_turb)
+            x_main.append(pt_esc[0]); y_main.append(pt_esc[1])
+            pts_x.append(pt_esc[0]); pts_y.append(pt_esc[1])
+            pts_txt.append(rotulo_estado(contador, es_ideal=False, eta=eta_t))
+            pts_pos.append("middle right")
+
+        # Cierre horizontal hacia el estado 1 en el condensador
+        x_main.append(pt1[0])
+        y_main.append(pt1[1])
+        fig.add_trace(go.Scatter(
+            x=x_main, y=y_main,
+            mode='lines',
+            line=dict(color=color_ciclo, width=2.4),
+            name='Ciclo Principal',
+            hoverinfo='skip'
+        ))
+
+        fig.add_trace(go.Scatter(
                 x=pts_x, y=pts_y, mode='markers+text',
                 marker=dict(symbol='square', size=7, color='white', line=dict(color='white', width=1)),
                 text=pts_txt, textposition=pts_pos,
@@ -1601,7 +1618,7 @@ try:
                 name='Estados'
             ))
 
-            anotaciones = [
+        anotaciones = [
                 dict(x=(s_f_cald + s_g_cald)/2, y=T_sat_cald + 10, text=f"<b>{fmt_p(P_cald)}  ▶</b>", showarrow=False, font=dict(color='white', size=11)),
                 dict(x=(s_cond_out/1e3 + s_out_turb/1e3)/2, y=T_cond_out + 10, text=f"<b>{fmt_p(P_cond)}  ◀</b>", showarrow=False, font=dict(color='white', size=11))
             ]
