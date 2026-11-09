@@ -716,7 +716,7 @@ else:
 
         fwh_configuracion.append({"tipo": t_sel, "presion": p_sel, "drenaje": dren_sel})
 
-with st.sidebar.expander("Máquinas y Entorno (2da Ley)"):
+with st.sidebar.expander("Máquinas y Entorno"):
     eta_t = st.slider("Isentrópica Turbina (η_t)", 0.50, 1.00, float(st.session_state["eta_t"]/100.0), 0.01)
     eta_p = st.slider("Isentrópica Bomba (η_p)", 0.50, 1.00, float(st.session_state["eta_p"]/100.0), 0.01)
     TH = st.number_input("Temp. Fuente (T_H) [K]", value=float(st.session_state["TH"]))
@@ -1271,12 +1271,12 @@ try:
             
             doc += f"""\n---
 
-### 3. Resultados Energéticos y de Segunda Ley
+### 3. Resultados Energéticos
 * **Trabajo neto específico (w_neto):** **{w_neto/1e3:.2f} kJ/kg**
 * **Calor total suministrado (q_in):** **{q_in/1e3:.2f} kJ/kg**
 * **Potencia Total Generada (W_neto para ṁ = {m_dot:.1f} kg/s):** **{W_dot_neto:.2f} MW**
 * **Eficiencia Térmica (η_th):** **{eta_th:.2f} %**
-* **Eficiencia de la Segunda Ley (η_II):** **{eta_II:.2f} %**
+* **Eficiencia Exergética (η_II):** **{eta_II:.2f} %**
 """
             return doc
 
