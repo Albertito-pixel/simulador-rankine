@@ -1276,7 +1276,6 @@ try:
 * **Calor total suministrado (q_in):** **{q_in/1e3:.2f} kJ/kg**
 * **Potencia Total Generada (W_neto para ṁ = {m_dot:.1f} kg/s):** **{W_dot_neto:.2f} MW**
 * **Eficiencia Térmica (η_th):** **{eta_th:.2f} %**
-* **Eficiencia Exergética (η_II):** **{eta_II:.2f} %**
 """
             return doc
 
